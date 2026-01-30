@@ -49,12 +49,17 @@ class StatementBank:
         os.makedirs(os.path.dirname(self.persistence_path), exist_ok=True)
         self.export_to_file(self.persistence_path, include_id=True)
 
-    def add(self, text: str, is_true: bool) -> int:
-        entry = StatementEntry(id=self._next_id, text=text, is_true=is_true)
+    def add(self, text: str, is_true: bool) -> bool:
+        """Adds a statement. Returns True if added, False if duplicate."""
+        norm = text.strip().lower()
+        if any(s.text.strip().lower() == norm for s in self.statements):
+            return False
+
+        entry = StatementEntry(id=self._next_id, text=text.strip(), is_true=is_true)
         self.statements.append(entry)
         self._next_id += 1
         self.save()
-        return entry.id
+        return True
 
     def remove(self, entry_id: int) -> bool:
         initial_len = len(self.statements)
@@ -71,57 +76,49 @@ class StatementBank:
             return [s for s in self.statements if not s.is_true]
         return self.statements
 
-    def import_from_file(self, path: str, default_truth: Optional[bool] = None) -> int:
-        count = 0
+    def import_from_file(self, path: str, default_truth: Optional[bool] = None) -> tuple[int, int]:
+        added_count = 0
+        dup_count = 0
+        
         if not os.path.exists(path):
             raise FileNotFoundError(f"File not found: {path}")
 
-        # Basic Check: is it CSV or txt?
-        # If txt, we read lines. If CSV, we expect columns.
         _, ext = os.path.splitext(path)
         
         with open(path, 'r', encoding='utf-8') as f:
             if ext.lower() == '.csv':
                 reader = csv.reader(f)
                 for row in reader:
-                    # Expected format: "statement", "true/false" OR just "statement" if default provided
                     if not row: continue
-                    
                     text = row[0].strip()
                     if not text: continue
                     
+                    is_true = False
                     if default_truth is not None:
-                        is_true = default_truth
-                    else:
-                        # Try to parse 2nd column
-                        if len(row) > 1:
-                            val = row[1].lower().strip()
-                            is_true = val in ('true', '1', 'yes', 't')
-                        else:
-                            # Skip if unclear
-                            continue
+                         is_true = default_truth
+                    elif len(row) > 1:
+                         is_true = row[1].lower().strip() in ('true', '1', 'yes', 't')
                     
-                    # Internal add without save (optimize)
-                    entry_id = self._next_id
-                    self.statements.append(StatementEntry(id=entry_id, text=text, is_true=is_true))
-                    self._next_id += 1
-                    count += 1
+                    if self.add(text, is_true):
+                        added_count += 1
+                    else:
+                        dup_count += 1
             else:
-                # Assume raw text, one per line
-                if default_truth is None:
-                    raise ValueError("Must provide default truth value for text files.")
-                
+                # Text file
                 for line in f:
-                    line = line.strip()
-                    if line:
-                        entry_id = self._next_id
-                        self.statements.append(StatementEntry(id=entry_id, text=line, is_true=default_truth))
-                        self._next_id += 1
-                        count += 1
-        
-        if count > 0:
-            self.save()
-        return count
+                    text = line.strip()
+                    if not text: continue
+                    is_true = default_truth if default_truth is not None else False
+                    
+                    if self.add(text, is_true):
+                        added_count += 1
+                    else:
+                        dup_count += 1
+                        
+        self.save()
+        return (added_count, dup_count)
+
+
 
     def export_to_file(self, path: str, filter_type: str = "all", include_id: bool = False) -> int:
         data = self.get_filtered(filter_type)

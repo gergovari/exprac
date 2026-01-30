@@ -83,8 +83,11 @@ class StatementBankCommand(Command):
                      raise ValueError("Usage: :sb add 'text' true/false")
                 text = args[1]
                 is_true = args[2].lower() in ('true', '1', 'yes', 't')
-                new_id = context.bank.add(text, is_true)
-                context.show_message("Success", f"Statement added with ID {new_id}")
+                is_true = args[2].lower() in ('true', '1', 'yes', 't')
+                if context.bank.add(text, is_true):
+                    context.show_message("Success", f"Statement added.")
+                else:
+                    context.show_message("Info", f"Ignored duplicate statement.")
             
             elif subcmd == "remove":
                 if len(args) < 2: raise ValueError("Usage: :sb remove <id>")
@@ -101,8 +104,14 @@ class StatementBankCommand(Command):
                 if len(args) > 2:
                     default_truth = args[2].lower() in ('true', '1', 'yes', 't')
                 
-                count = context.bank.import_from_file(path, default_truth)
-                context.show_message("Success", f"Imported {count} items.")
+                if len(args) > 2:
+                    default_truth = args[2].lower() in ('true', '1', 'yes', 't')
+                
+                count, dups = context.bank.import_from_file(path, default_truth)
+                msg = f"Imported {count} items."
+                if dups > 0:
+                    msg += f" Ignored {dups} duplicates."
+                context.show_message("Success", msg)
 
             elif subcmd == "export":
                 if len(args) < 2: raise ValueError("Usage: :sb export <file> [filter]")

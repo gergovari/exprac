@@ -21,6 +21,7 @@ from src.commands import (
     PrevTabCommand, SwitchTabCommand, VerifyStatementCommand,
     StatementBankCommand
 )
+from src.completer import create_completer
 
 class View(ABC):
     def __init__(self, name: str):
@@ -58,7 +59,13 @@ class StatementBankView(View):
         self.filter_modes = ["all", "true", "false"]
         self.current_filter_index = 0
         self.scroll_offset = 0
-        self.page_size = 15
+        self.scroll_offset = 0
+
+    def _get_page_size(self):
+        import shutil
+        height = shutil.get_terminal_size().lines
+        # Overhead: Tabs(1)+Header(3)+Spacer(1)+Meta(1)+Status(1)+Input(1) = ~8. + Padding.
+        return max(5, height - 10)
 
     @property
     def filter_mode(self):
@@ -75,7 +82,8 @@ class StatementBankView(View):
 
     def scroll(self, direction: int):
         items = self.bank.get_filtered(self.filter_mode)
-        max_offset = max(0, len(items) - self.page_size)
+        page_size = self._get_page_size()
+        max_offset = max(0, len(items) - page_size)
         self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
 
     def render(self, console: Console) -> Any:
@@ -101,7 +109,8 @@ class StatementBankView(View):
         table.add_column("Truth", style="magenta", width=8, justify="center")
 
         all_items = self.bank.get_filtered(self.filter_mode)
-        visible_items = all_items[self.scroll_offset : self.scroll_offset + self.page_size]
+        page_size = self._get_page_size()
+        visible_items = all_items[self.scroll_offset : self.scroll_offset + page_size]
         
         for item in visible_items:
             truth_str = "True" if item.is_true else "False"
@@ -224,7 +233,13 @@ class App:
         self.view_manager.add_view(HelpView(self.registry))
 
         # Input buffer handling
-        self.input_buffer = Buffer(multiline=False, accept_handler=self._handle_input)
+        self.completer = create_completer(self.registry)
+        self.input_buffer = Buffer(
+            multiline=False, 
+            accept_handler=self._handle_input,
+            completer=self.completer,
+            complete_while_typing=False
+        )
         
         from prompt_toolkit.filters import Condition
 
@@ -250,6 +265,18 @@ class App:
         def _(event):
             self.input_buffer.text = ""
             self.app.layout.focus(self.output_control)
+
+        # Command Mode: Backspace to exit if empty
+        @self.kb.add("backspace", filter=~is_normal_mode_filter)
+        def _(event):
+            buff = event.app.current_buffer
+            
+            # Perform standard backspace
+            buff.delete_before_cursor(count=1)
+            
+            # If empty, exit to Normal Mode
+            if len(buff.text) == 0:
+                self.app.layout.focus(self.output_control)
 
         # Tab Navigation
         @self.kb.add("tab", filter=is_normal_mode_filter)
@@ -370,6 +397,10 @@ class App:
         """Renders the current view using Rich + Capture."""
         view = self.view_manager.get_active()
         if not view: return ""
+        
+        # Sync width to ensure expand=True works
+        import shutil
+        self.console.width = shutil.get_terminal_size().columns
         
         renderable = view.render(self.console)
         
