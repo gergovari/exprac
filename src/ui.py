@@ -603,13 +603,13 @@ class App:
             
             # Fuzzy
             s = str(item.fuzzy_status)
-            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error"):
+            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error") or s.startswith("Retry"):
                 loop.create_task(self.checker.run_fuzzy_check(item, self.state))
                 resumed = True
 
             # LLM
             s = str(item.llm_status)
-            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error"):
+            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error") or s.startswith("Retry"):
                  loop.create_task(self.checker.run_llm_check(item, self.state))
                  resumed = True
                 
