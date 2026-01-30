@@ -1,6 +1,7 @@
 from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 import shlex
+import re
 
 class ConsoleCompleter(Completer):
     def __init__(self, registry, bank=None):
@@ -9,42 +10,46 @@ class ConsoleCompleter(Completer):
         # expanduser=True allows ~/paths
         self.path_completer = PathCompleter(expanduser=True)
 
+    def _get_bank_completions(self, query):
+        if not query: return
+        q_low = query.lower()
+        suggestions = set()
+        
+        for stmt in self.bank.statements:
+            s_text = stmt.text
+            idx = s_text.lower().find(q_low)
+            if idx != -1:
+                remainder = s_text[idx + len(query):]
+                if not remainder: continue 
+                
+                next_chunk = ""
+                if remainder[0] == ' ':
+                    m = re.match(r"^(\s+\S+)", remainder)
+                    if m: next_chunk = m.group(1)
+                else:
+                    m = re.match(r"^(\S+)", remainder)
+                    if m: next_chunk = m.group(1)
+                
+                if next_chunk:
+                    full_seg = s_text[idx : idx + len(query) + len(next_chunk)]
+                    suggestions.add(full_seg)
+        
+        for s in sorted(list(suggestions)):
+             yield Completion(s, start_position=-len(query))
+
     def get_completions(self, document, complete_event):
         text = document.text_before_cursor
         
-        # Alias ? Logic (Prefix-based)
-        if text.startswith("?") and self.bank:
-            try:
-                query = text[1:]
-                if query:
-                    q_low = query.lower()
-                    suggestions = set()
-                    import re
-                    
-                    for stmt in self.bank.statements:
-                        s_text = stmt.text
-                        idx = s_text.lower().find(q_low)
-                        if idx != -1:
-                            remainder = s_text[idx + len(query):]
-                            if not remainder: continue 
-                            
-                            next_chunk = ""
-                            if remainder[0] == ' ':
-                                m = re.match(r"^(\s+\S+)", remainder)
-                                if m: next_chunk = m.group(1)
-                            else:
-                                m = re.match(r"^(\S+)", remainder)
-                                if m: next_chunk = m.group(1)
-                            
-                            if next_chunk:
-                                full_seg = s_text[idx : idx + len(query) + len(next_chunk)]
-                                suggestions.add(full_seg)
-                    
-                    for s in sorted(list(suggestions)):
-                         yield Completion(s, start_position=-len(query))
-            except:
-                pass
-            return
+        # Alias ? (Search), / (Search), . (Verify)
+        if (text.startswith("?") or text.startswith("/") or text.startswith(".")) and self.bank:
+             # Skip prefix
+             start_idx = 1
+             while start_idx < len(text) and text[start_idx] == ' ':
+                 start_idx += 1
+             
+             query = text[start_idx:]
+             yield from self._get_bank_completions(query)
+             return
 
         parts = text.split(' ')
         
@@ -76,44 +81,18 @@ class ConsoleCompleter(Completer):
             
             subcmd = parts[1]
             
-            # Special handling for search to allow multi-word completion (Sentence completion)
+            # Special handling for search
             if subcmd == "search" and self.bank and arg_index >= 2:
                 try:
                     search_idx = text.lower().find("search")
                     if search_idx != -1:
                         prefix_start = search_idx + 6 
-                        # skip spaces
                         while prefix_start < len(text) and text[prefix_start] == ' ':
                             prefix_start += 1
                         
                         query = text[prefix_start:]
-                        if not query: return
-                        
-                        q_low = query.lower()
-                        suggestions = set()
-                        import re
-                        
-                        for stmt in self.bank.statements:
-                            s_text = stmt.text
-                            idx = s_text.lower().find(q_low)
-                            if idx != -1:
-                                remainder = s_text[idx + len(query):]
-                                if not remainder: continue 
-                                
-                                next_chunk = ""
-                                if remainder[0] == ' ':
-                                    m = re.match(r"^(\s+\S+)", remainder)
-                                    if m: next_chunk = m.group(1)
-                                else:
-                                    m = re.match(r"^(\S+)", remainder)
-                                    if m: next_chunk = m.group(1)
-                                
-                                if next_chunk:
-                                    full_seg = s_text[idx : idx + len(query) + len(next_chunk)]
-                                    suggestions.add(full_seg)
-                        
-                        for s in sorted(list(suggestions)):
-                             yield Completion(s, start_position=-len(query))
+                        # Use shared logic
+                        yield from self._get_bank_completions(query)
                 except Exception:
                     pass
                 return
@@ -136,6 +115,22 @@ class ConsoleCompleter(Completer):
                 for o in options:
                     if o.startswith(current_word):
                         yield Completion(o, start_position=-len(current_word))
+    
+        # 3. :vs Logic (NEW) - Support completion for :vs
+        if cmd == ":vs" and self.bank and arg_index >= 1:
+            # Join args to form query like search?
+            # User might type: :vs part of stmt
+            # Or :vs "part of stmt"
+            # Logic: treat rest of line as query
+            # Find command end
+            cmd_idx = text.find(":vs")
+            if cmd_idx != -1:
+                prefix_start = cmd_idx + 3
+                while prefix_start < len(text) and text[prefix_start] == ' ':
+                    prefix_start += 1
+                query = text[prefix_start:]
+                yield from self._get_bank_completions(query)
+            return
 
 def create_completer(registry, bank=None):
     return ConsoleCompleter(registry, bank)

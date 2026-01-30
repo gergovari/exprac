@@ -20,7 +20,8 @@ from src.state import VerificationState
 from src.commands import (
     CommandRegistry, QuitCommand, NextTabCommand, 
     PrevTabCommand, SwitchTabCommand, VerifyStatementCommand,
-    StatementBankCommand, SearchAliasCommand
+    StatementBankCommand, SearchAliasCommand, 
+    VerifyDotAliasCommand, ForwardSearchAliasCommand
 )
 from src.completer import create_completer
 
@@ -294,6 +295,8 @@ class App:
         self.registry.register(VerifyStatementCommand())
         self.registry.register(StatementBankCommand())
         self.registry.register(SearchAliasCommand())
+        self.registry.register(VerifyDotAliasCommand())
+        self.registry.register(ForwardSearchAliasCommand())
 
         # View System
         self.view_manager = ViewManager()
@@ -337,6 +340,20 @@ class App:
             if is_normal_mode_filter():
                 self.app.layout.focus(self.input_buffer)
                 self.input_buffer.text = "?"
+                self.input_buffer.cursor_position = 1
+
+        @self.kb.add("/")
+        def _(event):
+            if is_normal_mode_filter():
+                self.app.layout.focus(self.input_buffer)
+                self.input_buffer.text = "/"
+                self.input_buffer.cursor_position = 1
+
+        @self.kb.add(".")
+        def _(event):
+            if is_normal_mode_filter():
+                self.app.layout.focus(self.input_buffer)
+                self.input_buffer.text = "."
                 self.input_buffer.cursor_position = 1
 
         @self.kb.add("escape")
@@ -388,6 +405,31 @@ class App:
         def _(event):
             view = self.view_manager.get_active()
             if isinstance(view, StatementBankView):
+                view.scroll(1)
+
+        # Vim Navigation (h, j, k, l)
+        @self.kb.add("h", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.cycle_filter(-1)
+        
+        @self.kb.add("l", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.cycle_filter(1)
+
+        @self.kb.add("k", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll"):
+                view.scroll(-1)
+
+        @self.kb.add("j", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll"):
                 view.scroll(1)
 
         @self.kb.add("c-c")

@@ -163,9 +163,60 @@ class StatementBankCommand(Command):
         except Exception as e:
             context.show_message("Error", str(e))
 
+class VerifyDotAliasCommand(Command):
+    def __init__(self):
+        super().__init__(".", "Verify statements. Alias for :vs.")
+
+    async def execute(self, context: Any, args: List[str]):
+        # Switch to vs view
+        context.view_manager.switch_to("vs")
+        
+        raw_query = " ".join(args)
+        query = raw_query.strip()
+        
+        if not query:
+            context.show_message("Error", "No statement provided.")
+            return
+
+        # Treat the whole line as one statement
+        await context.process_new_item(query)
+        context.show_message("Info", f"Added: {query}")
+            
+        # Autoscroll
+        vs_view = None
+        for v in context.view_manager.views:
+            if v.name == "vs":
+                vs_view = v
+                break
+        if vs_view:
+             vs_view.scroll(99999)
+
 class SearchAliasCommand(Command):
     def __init__(self):
         super().__init__("?", "Search Statement Bank. Alias for :sb search.")
+
+    async def execute(self, context: Any, args: List[str]):
+        # Switch to sb view
+        context.view_manager.switch_to("sb")
+        
+        query = " ".join(args)
+        
+        # Find view
+        sb_view = None
+        for v in context.view_manager.views:
+            if v.name == "sb":
+                sb_view = v
+                break
+        
+        if sb_view:
+            sb_view.search_query = query
+            sb_view.scroll_offset = 0 
+            status = f"Filter set: {query}" if query else "Filter cleared"
+            context.show_message("Info", status)
+
+class ForwardSearchAliasCommand(Command):
+    def __init__(self):
+        super().__init__("/", "Search Statement Bank. Alias for :sb search.")
 
     async def execute(self, context: Any, args: List[str]):
         # Switch to sb view
@@ -197,9 +248,9 @@ class CommandRegistry:
         text = text.strip()
         if not text: return
         
-        # Special handling for ? alias (without space)
-        if text.startswith("?"):
-            cmd_name = "?"
+        # Special handling for aliases ?, /, .
+        if text.startswith("?") or text.startswith("/") or text.startswith("."):
+            cmd_name = text[0]
             rest = text[1:]
             args = [rest] if rest else []
             if cmd_name in self.commands:
