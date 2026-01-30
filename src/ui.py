@@ -127,8 +127,53 @@ class HelpView(View):
         self.registry = registry
     
     def render(self, console: Console) -> Any:
-        from rich.markdown import Markdown
-        return Markdown(self.registry.get_help_text())
+        from rich.panel import Panel
+        from rich.columns import Columns
+        from rich.console import Group
+        from rich.align import Align
+        from rich.text import Text
+
+        # Title
+        title = Text("✨ Truth Verification Console Help ✨", style="bold magenta")
+        
+        # Interaction Guide
+        nav_text = Text()
+        nav_text.append("Normal Mode\n", style="bold cyan underline")
+        nav_text.append("  TAB / S-TAB  ", style="yellow"); nav_text.append(": Switch View\n")
+        nav_text.append("  :            ", style="yellow"); nav_text.append(": Enter Command Mode\n")
+        nav_text.append("  Arrows       ", style="yellow"); nav_text.append(": Navigate Bank/List\n\n")
+        
+        nav_text.append("Command Mode\n", style="bold cyan underline")
+        nav_text.append("  ESC          ", style="yellow"); nav_text.append(": Cancel / Return to Normal\n")
+        nav_text.append("  ENTER        ", style="yellow"); nav_text.append(": Execute Command\n")
+        
+        nav_panel = Panel(nav_text, title="⌨️  Navigation & Keys", border_style="blue")
+        
+        # Commands List
+        cmd_text = Text()
+        for name, cmd in self.registry.commands.items():
+            cmd_text.append(f"{name:<5} ", style="bold green")
+            cmd_text.append(f"{cmd.description}\n")
+            
+        cmd_panel = Panel(cmd_text, title="🚀 Commands", border_style="green")
+        
+        # Bank Guide
+        bank_text = Text()
+        bank_text.append("Statement Bank Navigation\n", style="bold cyan underline")
+        bank_text.append("  ← / →        ", style="yellow"); bank_text.append(": Cycle Filters (All/True/False)\n")
+        bank_text.append("  ↑ / ↓        ", style="yellow"); bank_text.append(": Scroll List\n")
+        
+        bank_panel = Panel(bank_text, title="💾 Statement Bank", border_style="magenta")
+
+        # Layout
+        body = Columns([nav_panel, cmd_panel])
+        
+        return Group(
+            Align.center(title),
+            Text(""),
+            body,
+            bank_panel
+        )
 
 class ViewManager:
     def __init__(self):
