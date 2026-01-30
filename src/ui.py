@@ -2,7 +2,10 @@ import asyncio
 import shlex
 from abc import ABC, abstractmethod
 from prompt_toolkit import Application
-from prompt_toolkit.layout.containers import HSplit, Window
+from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
+from prompt_toolkit.widgets import Dialog, Label, Button
+from src.bank import StatementBank
+from typing import Any
 from prompt_toolkit.layout.layout import Layout
 from prompt_toolkit.layout.controls import FormattedTextControl, BufferControl
 from prompt_toolkit.buffer import Buffer
@@ -15,7 +18,8 @@ from src.logic import StatementChecker
 from src.state import VerificationState
 from src.commands import (
     CommandRegistry, QuitCommand, NextTabCommand, 
-    PrevTabCommand, SwitchTabCommand, VerifyStatementCommand
+    PrevTabCommand, SwitchTabCommand, VerifyStatementCommand,
+    StatementBankCommand
 )
 
 class View(ABC):
@@ -46,6 +50,76 @@ class VerificationView(View):
                 Text(item.llm_status)
             )
         return table
+
+class StatementBankView(View):
+    def __init__(self, bank: StatementBank):
+        super().__init__("sb")
+        self.bank = bank
+        self.filter_modes = ["all", "true", "false"]
+        self.current_filter_index = 0
+        self.scroll_offset = 0
+        self.page_size = 15
+
+    @property
+    def filter_mode(self):
+        return self.filter_modes[self.current_filter_index]
+
+    def set_filter(self, mode: str):
+        if mode in self.filter_modes:
+            self.current_filter_index = self.filter_modes.index(mode)
+            self.scroll_offset = 0
+
+    def cycle_filter(self, direction: int):
+        self.current_filter_index = (self.current_filter_index + direction) % len(self.filter_modes)
+        self.scroll_offset = 0
+
+    def scroll(self, direction: int):
+        items = self.bank.get_filtered(self.filter_mode)
+        max_offset = max(0, len(items) - self.page_size)
+        self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
+
+    def render(self, console: Console) -> Any:
+        # Header showing Tabs
+        header_text = []
+        for mode in self.filter_modes:
+            label = mode.capitalize()
+            if mode == self.filter_mode:
+                header_text.append(f"\x1b[7m {label} \x1b[0m")
+            else:
+                header_text.append(f" {label} ")
+        
+        from rich.console import Group
+        from rich.panel import Panel
+        from rich.align import Align
+
+        header_str = "".join(header_text)
+        
+        # Table
+        table = Table(box=None, padding=(0, 2), expand=True)
+        table.add_column("ID", style="cyan", justify="right", width=4)
+        table.add_column("Statement", style="white", ratio=1)
+        table.add_column("Truth", style="magenta", width=8, justify="center")
+
+        all_items = self.bank.get_filtered(self.filter_mode)
+        visible_items = all_items[self.scroll_offset : self.scroll_offset + self.page_size]
+        
+        for item in visible_items:
+            truth_str = "True" if item.is_true else "False"
+            style = "green" if item.is_true else "red"
+            table.add_row(str(item.id), item.text, Text(truth_str, style=style))
+
+        # Scroll Indicator (Simple text based)
+        meta_text = f"Showing {len(visible_items)}/{len(all_items)} | Index {self.scroll_offset}"
+        
+        return Group(
+            Align.center(Text.from_ansi(header_str)), 
+            Text(""), # Spacer
+            table,
+            Text(""),
+            Align.right(Text(meta_text, style="dim"))
+        )
+
+
 
 class HelpView(View):
     def __init__(self, registry: CommandRegistry):
@@ -85,7 +159,8 @@ class App:
     def __init__(self):
         self.console = Console(force_terminal=True, highlight=False)
         self.state = VerificationState()
-        self.checker = StatementChecker("data") 
+        self.bank = StatementBank("data/bank.csv") # Persist to disk
+        self.checker = StatementChecker("data", bank=self.bank) 
         self.running = True
         
         # Command Registry
@@ -95,34 +170,95 @@ class App:
         self.registry.register(PrevTabCommand())
         self.registry.register(SwitchTabCommand())
         self.registry.register(VerifyStatementCommand())
+        self.registry.register(StatementBankCommand())
 
         # View System
         self.view_manager = ViewManager()
         self.view_manager.add_view(VerificationView(self.state))
+        self.view_manager.add_view(StatementBankView(self.bank))
         self.view_manager.add_view(HelpView(self.registry))
 
         # Input buffer handling
         self.input_buffer = Buffer(multiline=False, accept_handler=self._handle_input)
         
+        from prompt_toolkit.filters import Condition
+
         # Key bindings
         self.kb = KeyBindings()
+
+        @Condition
+        def is_normal_mode_filter():
+            try:
+                return self.app.layout.has_focus(self.output_control)
+            except:
+                return False
+
+        # Mode Switching
+        @self.kb.add(":")
+        def _(event):
+            if is_normal_mode_filter():
+                self.app.layout.focus(self.input_buffer)
+                self.input_buffer.text = ":"
+                self.input_buffer.cursor_position = 1
+
+        @self.kb.add("escape")
+        def _(event):
+            self.input_buffer.text = ""
+            self.app.layout.focus(self.output_control)
+
+        # Arrow Navigation (Normal Mode Only)
+        @self.kb.add("left", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.cycle_filter(-1)
+        
+        @self.kb.add("right", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.cycle_filter(1)
+
+        @self.kb.add("up", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.scroll(-1)
+
+        @self.kb.add("down", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if isinstance(view, StatementBankView):
+                view.scroll(1)
+
         @self.kb.add("c-c")
         @self.kb.add("c-q")
         def _(event):
             event.app.exit()
 
         # Layout components
-        self.output_control = FormattedTextControl(text=self._get_active_view_text)
+        self.output_control = FormattedTextControl(
+            text=self._get_active_view_text,
+            focusable=True, # Allow focus for Normal Mode
+            show_cursor=False # Hide cursor in Normal Mode
+        )
         self.tab_bar_control = FormattedTextControl(text=self._get_tab_bar_text)
         
-        self.layout = Layout(
-            HSplit([
-                Window(content=self.tab_bar_control, height=1), # Tab Bar at Top
-                Window(content=self.output_control), # Main Content
-                Window(height=1, char='-'),          # Context/Input Divider
-                Window(content=BufferControl(buffer=self.input_buffer), height=1), # Input line
-            ])
+        # Main body
+        body = HSplit([
+            Window(content=self.tab_bar_control, height=1), # Tab Bar at Top
+            Window(content=self.output_control), # Main Content
+            Window(content=FormattedTextControl(text=self._get_status_bar_text), height=1), # Status Bar
+            Window(content=BufferControl(buffer=self.input_buffer), height=1), # Input line
+        ])
+        
+        # Float container for popups
+        self.root_container = FloatContainer(
+            content=body,
+            floats=[]
         )
+        
+        self.layout = Layout(self.root_container)
 
         self.app = Application(
             layout=self.layout,
@@ -131,6 +267,50 @@ class App:
             mouse_support=False,
             refresh_interval=0.1
         )
+        # Start in Normal Mode
+        self.layout.focus(self.output_control)
+
+        # Status Bar State
+        self.status_message = ""
+        self.status_type = "info"
+        self.clear_task = None
+
+    def show_message(self, title: str, text: str):
+        """Display a message in the status bar."""
+        self.status_type = "error" if title.lower() == "error" else "info"
+        self.status_message = f"{title}: {text}" if title.lower() == "error" else text
+        
+        if self.clear_task:
+            self.clear_task.cancel()
+        
+        async def clear():
+            await asyncio.sleep(5)
+            self.status_message = ""
+            self.app.invalidate()
+            
+        self.clear_task = asyncio.create_task(clear())
+        self.app.invalidate()
+
+    def _get_status_bar_text(self):
+        """Render the status bar."""
+        is_command = False
+        try:
+            is_command = self.app.layout.has_focus(self.input_buffer)
+        except: pass
+        
+        mode = " COMMAND " if is_command else " NORMAL "
+        mode_style = "reverse"
+        
+        parts = [
+            (mode_style, mode),
+            ("", " ")
+        ]
+        
+        if self.status_message:
+            msg_style = "#ff0000" if self.status_type == "error" else "#00ff00"
+            parts.append((msg_style, self.status_message))
+            
+        return parts
 
     def _get_active_view_text(self):
         """Renders the current view using Rich + Capture."""
@@ -158,14 +338,13 @@ class App:
 
     def _handle_input(self, buff):
         text = buff.text.strip()
+        # Always return focus to Normal Mode after execution try
+        self.app.layout.focus(self.output_control)
+        
         if not text:
             return
         
         # Execute via registry
-        # We spawn it as a task because execute is async and accept_handler can be sync/async,
-        # but prompt_toolkit usually expects a boolean return or None. 
-        # accept_handler can return True to keep buffer check? No.
-        # It's best to run async command in background task.
         asyncio.create_task(self.registry.execute(text, self))
 
     async def process_new_item(self, stmt):

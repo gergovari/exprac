@@ -60,6 +60,60 @@ class VerifyStatementCommand(Command):
                 # We'll need to expose `process_new_item` in App
                 await context.process_new_item(stmt)
 
+class StatementBankCommand(Command):
+    def __init__(self):
+        super().__init__(":sb", "Statement Bank. Usage: :sb [add|remove|import|export|all|true|false]")
+
+    async def execute(self, context: Any, args: List[str]):
+        # Switch to tab first
+        context.view_manager.switch_to("sb")
+        
+        if not args:
+            return
+
+        subcmd = args[0].lower()
+        
+
+
+        # Operations
+        try:
+            if subcmd == "add":
+                # args: add "text" true
+                if len(args) < 3:
+                     raise ValueError("Usage: :sb add 'text' true/false")
+                text = args[1]
+                is_true = args[2].lower() in ('true', '1', 'yes', 't')
+                new_id = context.bank.add(text, is_true)
+                context.show_message("Success", f"Statement added with ID {new_id}")
+            
+            elif subcmd == "remove":
+                if len(args) < 2: raise ValueError("Usage: :sb remove <id>")
+                sid = int(args[1])
+                if context.bank.remove(sid):
+                    context.show_message("Success", f"Statement {sid} removed.")
+                else:
+                    context.show_message("Error", f"ID {sid} not found.")
+
+            elif subcmd == "import":
+                if len(args) < 2: raise ValueError("Usage: :sb import <file> [default_truth]")
+                path = args[1]
+                default_truth = None
+                if len(args) > 2:
+                    default_truth = args[2].lower() in ('true', '1', 'yes', 't')
+                
+                count = context.bank.import_from_file(path, default_truth)
+                context.show_message("Success", f"Imported {count} items.")
+
+            elif subcmd == "export":
+                if len(args) < 2: raise ValueError("Usage: :sb export <file> [filter]")
+                path = args[1]
+                filter_type = args[2] if len(args) > 2 else "all"
+                count = context.bank.export_to_file(path, filter_type)
+                context.show_message("Success", f"Exported {count} items.")
+                
+        except Exception as e:
+            context.show_message("Error", str(e))
+
 class CommandRegistry:
     def __init__(self):
         self.commands = {}
@@ -86,8 +140,9 @@ class CommandRegistry:
         if cmd_name in self.commands:
             await self.commands[cmd_name].execute(context, args)
         else:
-            # Optional: Feedback for unknown command
-            pass
+            # Feedback for unknown command - use show_message now!
+            if hasattr(context, "show_message"):
+                context.show_message("Error", f"Unknown command: {cmd_name}")
     
     def get_help_text(self) -> str:
         """Generates markdown help text from registered commands."""

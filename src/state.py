@@ -32,3 +32,7 @@ class VerificationState:
     # but having a method triggers the dirty flag.
     def flag_changed(self):
         self.changed = True
+
+    def update_item(self, item: VerificationItem):
+        """Signal that an item has been updated."""
+        self.changed = True
