@@ -2,7 +2,7 @@ import yaml
 import os
 import asyncio
 from typing import List, Any
-from src.providers import GeminiProvider
+from src.providers import GeminiProvider, ModelNotFoundError
 from src.ratelimit import RateLimitManager, GlobalRateLimitError
 
 class ProviderManager:
@@ -80,6 +80,13 @@ class ProviderManager:
                 except GlobalRateLimitError as e:
                     # Provider hit limit during execution
                     min_wait = min(min_wait, e.wait_time)
+                    continue
+                except ModelNotFoundError as e:
+                    # Config error - report and skip permanently (well, for this loop)
+                    if on_update:
+                        on_update(f"[Warning] {e}. Skipping...")
+                    # Give user time to read
+                    await asyncio.sleep(2.0)
                     continue
                 except Exception as e:
                     # Non-rate-limit error? For now, maybe fail, or log and continue?

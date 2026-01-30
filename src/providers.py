@@ -20,6 +20,9 @@ class LLMProvider(ABC):
         """Verifies the truth of a statement using general knowledge."""
         pass
 
+class ModelNotFoundError(Exception):
+    pass
+
 class GeminiProvider(LLMProvider):
     def __init__(self, model_name: str = "gemini-2.5-flash"):
         self.model_name = model_name
@@ -46,11 +49,14 @@ class GeminiProvider(LLMProvider):
             )
             return response
         except Exception as e:
+            err_msg = str(e)
             # Check for Rate Limit 429
-            if "429" in str(e) or "ResourceExhausted" in str(e):
+            if "429" in err_msg or "ResourceExhausted" in err_msg:
                 # Report limit hit!
                 rl_manager.report_limit_hit(self.provider_name, self.model_name, cooldown_seconds=60)
                 raise GlobalRateLimitError(self.provider_name, self.model_name, 60)
+            elif "404" in err_msg or "NOT_FOUND" in err_msg:
+                raise ModelNotFoundError(f"Model '{self.model_name}' not found/supported")
             else:
                 raise e
 

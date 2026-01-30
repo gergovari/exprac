@@ -14,7 +14,7 @@ profiles:
 
   gemini_3_flash:
     provider: gemini
-    model: gemini-3.0-flash
+    model: gemini-3-flash-previii
     api_key_env: GEMINI_API_KEY
 
 # Define the execution order by listing profile names
