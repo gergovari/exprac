@@ -373,33 +373,29 @@ class App:
 
         # Mode Switching
         # Mode Switching
-        @self.kb.add(":")
+        @self.kb.add(":", filter=is_normal_mode_filter)
         def _(event):
-            if is_normal_mode_filter():
-                self.app.layout.focus(self.input_buffer)
-                self.input_buffer.text = ":"
-                self.input_buffer.cursor_position = 1
+            self.app.layout.focus(self.input_buffer)
+            self.input_buffer.text = ":"
+            self.input_buffer.cursor_position = 1
 
-        @self.kb.add("?")
+        @self.kb.add("?", filter=is_normal_mode_filter)
         def _(event):
-            if is_normal_mode_filter():
-                self.app.layout.focus(self.input_buffer)
-                self.input_buffer.text = "?"
-                self.input_buffer.cursor_position = 1
+            self.app.layout.focus(self.input_buffer)
+            self.input_buffer.text = "?"
+            self.input_buffer.cursor_position = 1
 
-        @self.kb.add("/")
+        @self.kb.add("/", filter=is_normal_mode_filter)
         def _(event):
-            if is_normal_mode_filter():
-                self.app.layout.focus(self.input_buffer)
-                self.input_buffer.text = "/"
-                self.input_buffer.cursor_position = 1
+            self.app.layout.focus(self.input_buffer)
+            self.input_buffer.text = "/"
+            self.input_buffer.cursor_position = 1
 
-        @self.kb.add(".")
+        @self.kb.add(".", filter=is_normal_mode_filter)
         def _(event):
-            if is_normal_mode_filter():
-                self.app.layout.focus(self.input_buffer)
-                self.input_buffer.text = "."
-                self.input_buffer.cursor_position = 1
+            self.app.layout.focus(self.input_buffer)
+            self.input_buffer.text = "."
+            self.input_buffer.cursor_position = 1
 
         @self.kb.add("escape")
         def _(event):

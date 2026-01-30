@@ -2,6 +2,7 @@ from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 import shlex
 import re
+import os
 
 class ConsoleCompleter(Completer):
     def __init__(self, registry, bank=None):
@@ -51,13 +52,16 @@ class ConsoleCompleter(Completer):
              yield from self._get_bank_completions(query)
              return
 
-        parts = text.split(' ')
-        
-        # Current word is the last part
-        current_word = parts[-1]
-        
+        # Robust splitting: Filter empty parts but keep trailing empty if space present
+        raw_parts = [p for p in text.split(' ') if p]
+        if text.endswith(' '):
+            parts = raw_parts + ['']
+        else:
+            parts = raw_parts if raw_parts else ['']
+            
         # Determine argument index being typed
         arg_index = len(parts) - 1
+        current_word = parts[-1]
         
         # 1. Top Level Command
         if arg_index == 0:
@@ -79,50 +83,62 @@ class ConsoleCompleter(Completer):
                         yield Completion(s, start_position=-len(current_word))
                 return
             
-            subcmd = parts[1]
-            
-            # Special handling for search
-            if subcmd == "search" and self.bank and arg_index >= 2:
-                try:
-                    search_idx = text.lower().find("search")
-                    if search_idx != -1:
-                        prefix_start = search_idx + 6 
-                        while prefix_start < len(text) and text[prefix_start] == ' ':
-                            prefix_start += 1
-                        
-                        query = text[prefix_start:]
-                        # Use shared logic
-                        yield from self._get_bank_completions(query)
-                except Exception:
-                    pass
-                return
-
-            # Arg 2: File Path (import/export)
-            if arg_index == 2:
-                if subcmd in ["import", "export"]:
-                    dummy_doc = Document(current_word, cursor_position=len(current_word))
-                    yield from self.path_completer.get_completions(dummy_doc, complete_event)
-                return
-
-            # Arg 3: Boolean (add, import) or Filter (export)
-            if arg_index == 3:
-                options = []
-                if subcmd in ["add", "import"]:
-                    options = ["true", "false"]
-                elif subcmd == "export":
-                    options = ["all", "true", "false"]
+            if len(parts) > 1:
+                subcmd = parts[1]
                 
-                for o in options:
-                    if o.startswith(current_word):
-                        yield Completion(o, start_position=-len(current_word))
+                # Special handling for search
+                if subcmd == "search" and self.bank and arg_index >= 2:
+                    try:
+                        search_idx = text.lower().find("search")
+                        if search_idx != -1:
+                            prefix_start = search_idx + 6 
+                            while prefix_start < len(text) and text[prefix_start] == ' ':
+                                prefix_start += 1
+                            
+                            query = text[prefix_start:]
+                            # Use shared logic
+                            yield from self._get_bank_completions(query)
+                    except Exception:
+                        pass
+                    return
+
+                # Arg 2: File Path (import/export)
+                if arg_index == 2:
+                    if subcmd in ["import", "export"]:
+                        dummy_doc = Document(current_word, cursor_position=len(current_word))
+                        for compl in self.path_completer.get_completions(dummy_doc, complete_event):
+                            c_text = compl.text
+                            # Robust directory detection using prefix from the word being completed
+                            prefix = current_word[:len(current_word) + compl.start_position]
+                            full_path = prefix + c_text
+                            
+                            if os.path.isdir(os.path.expanduser(full_path)) and not c_text.endswith('/'):
+                                c_text += '/'
+                            
+                            yield Completion(
+                                c_text,
+                                start_position=compl.start_position,
+                                display=compl.display,
+                                display_meta=compl.display_meta,
+                                style=compl.style,
+                                selected_style=compl.selected_style
+                            )
+                    return
+
+                # Arg 3: Boolean (add, import) or Filter (export)
+                if arg_index == 3:
+                    options = []
+                    if subcmd in ["add", "import"]:
+                        options = ["true", "false"]
+                    elif subcmd == "export":
+                        options = ["all", "true", "false"]
+                    
+                    for o in options:
+                        if o.startswith(current_word):
+                            yield Completion(o, start_position=-len(current_word))
     
         # 3. :vs Logic (NEW) - Support completion for :vs
         if cmd == ":vs" and self.bank and arg_index >= 1:
-            # Join args to form query like search?
-            # User might type: :vs part of stmt
-            # Or :vs "part of stmt"
-            # Logic: treat rest of line as query
-            # Find command end
             cmd_idx = text.find(":vs")
             if cmd_idx != -1:
                 prefix_start = cmd_idx + 3
