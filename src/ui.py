@@ -206,6 +206,15 @@ class App:
             self.input_buffer.text = ""
             self.app.layout.focus(self.output_control)
 
+        # Tab Navigation
+        @self.kb.add("tab", filter=is_normal_mode_filter)
+        def _(event):
+            self.view_manager.next_view()
+
+        @self.kb.add("s-tab", filter=is_normal_mode_filter)
+        def _(event):
+            self.view_manager.prev_view()
+
         # Arrow Navigation (Normal Mode Only)
         @self.kb.add("left", filter=is_normal_mode_filter)
         def _(event):
