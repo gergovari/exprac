@@ -61,7 +61,7 @@ class App:
         elif res['status'] == 'not_found':
             return "[dim]Not Found[/dim]"
         else:
-            return "[red]Error[/red]"
+            return f"[red]Error: {res.get('message', 'Unknown')}[/red]"
 
     async def run(self):
         self.console.print("[bold green]Interactive Usage Console[/bold green]")
