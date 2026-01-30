@@ -311,7 +311,7 @@ class App:
             accept_handler=self._handle_input,
             completer=self.completer,
             complete_while_typing=False,
-            history=FileHistory('.command_history')
+            history=FileHistory('data/command_history')
         )
         
         from prompt_toolkit.filters import Condition
@@ -586,7 +586,42 @@ class App:
             self.app.invalidate()
             await asyncio.sleep(0.1)
 
+    def resume_pending(self):
+        """Resumes pending verifications on startup."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return 
+
+        count = 0
+        for item in self.state.items:
+            resumed = False
+            # Exact
+            if str(item.exact_status) in ["Pending", "Checking..."]:
+                loop.create_task(self.checker.run_exact_check(item, self.state))
+                resumed = True
+            
+            # Fuzzy
+            s = str(item.fuzzy_status)
+            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error"):
+                loop.create_task(self.checker.run_fuzzy_check(item, self.state))
+                resumed = True
+
+            # LLM
+            s = str(item.llm_status)
+            if s in ["Pending", "Checking..."] or s.startswith("Rate") or s.startswith("Error"):
+                 loop.create_task(self.checker.run_llm_check(item, self.state))
+                 resumed = True
+                
+            if resumed: count += 1
+            
+        if count > 0:
+            self.show_message("Info", f"Resumed {count} pending verifications.")
+
     async def run(self):
+        # Resume pending items
+        self.resume_pending()
+
         # Start refresh loop in background
         refresh_task = asyncio.create_task(self._refresh_loop())
         try:
