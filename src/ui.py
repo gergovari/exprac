@@ -432,6 +432,30 @@ class App:
             if hasattr(view, "scroll"):
                 view.scroll(1)
 
+        @self.kb.add("pageup", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll") and hasattr(view, "_get_page_size"):
+                view.scroll(-view._get_page_size())
+
+        @self.kb.add("pagedown", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll") and hasattr(view, "_get_page_size"):
+                view.scroll(view._get_page_size())
+
+        @self.kb.add("home", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll"):
+                view.scroll(-999999)
+
+        @self.kb.add("end", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if hasattr(view, "scroll"):
+                view.scroll(999999)
+
         @self.kb.add("c-c")
         @self.kb.add("c-q")
         def _(event):
