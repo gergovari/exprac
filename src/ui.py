@@ -59,7 +59,9 @@ class StatementBankView(View):
         self.filter_modes = ["all", "true", "false"]
         self.current_filter_index = 0
         self.scroll_offset = 0
+        self.current_filter_index = 0
         self.scroll_offset = 0
+        self.search_query = ""
 
     def _get_page_size(self):
         import shutil
@@ -81,7 +83,7 @@ class StatementBankView(View):
         self.scroll_offset = 0
 
     def scroll(self, direction: int):
-        items = self.bank.get_filtered(self.filter_mode)
+        items = self.bank.get_filtered(self.filter_mode, self.search_query)
         page_size = self._get_page_size()
         max_offset = max(0, len(items) - page_size)
         self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
@@ -96,6 +98,9 @@ class StatementBankView(View):
             else:
                 header_text.append(f" {label} ")
         
+        if self.search_query:
+            header_text.append(f" \x1b[33mSearch: {self.search_query}\x1b[0m ")
+        
         from rich.console import Group
         from rich.panel import Panel
         from rich.align import Align
@@ -108,14 +113,25 @@ class StatementBankView(View):
         table.add_column("Statement", style="white", ratio=1)
         table.add_column("Truth", style="magenta", width=8, justify="center")
 
-        all_items = self.bank.get_filtered(self.filter_mode)
+        all_items = self.bank.get_filtered(self.filter_mode, self.search_query)
         page_size = self._get_page_size()
         visible_items = all_items[self.scroll_offset : self.scroll_offset + page_size]
         
+        import re
         for item in visible_items:
             truth_str = "True" if item.is_true else "False"
             style = "green" if item.is_true else "red"
-            table.add_row(str(item.id), item.text, Text(truth_str, style=style))
+            
+            stmt_text = Text(item.text, style="white")
+            if self.search_query:
+                # Highlight the search query in the text
+                # We use (?i) for case-insensitivity as Rich's API varies on flags arg
+                stmt_text.highlight_regex(
+                    "(?i)" + re.escape(self.search_query), 
+                    style="bold black on yellow"
+                )
+
+            table.add_row(str(item.id), stmt_text, Text(truth_str, style=style))
 
         # Scroll Indicator (Simple text based)
         meta_text = f"Showing {len(visible_items)}/{len(all_items)} | Index {self.scroll_offset}"

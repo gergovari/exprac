@@ -113,6 +113,23 @@ class StatementBankCommand(Command):
                     msg += f" Ignored {dups} duplicates."
                 context.show_message("Success", msg)
 
+            elif subcmd == "search":
+                # :sb search "query"
+                query = args[1] if len(args) > 1 else ""
+                
+                # Find the view to update state
+                sb_view = None
+                for v in context.view_manager.views:
+                    if v.name == "sb":
+                        sb_view = v
+                        break
+                
+                if sb_view:
+                    sb_view.search_query = query
+                    sb_view.scroll_offset = 0 
+                    status = f"Filter set: {query}" if query else "Filter cleared"
+                    context.show_message("Info", status)
+
             elif subcmd == "export":
                 if len(args) < 2: raise ValueError("Usage: :sb export <file> [filter]")
                 path = args[1]

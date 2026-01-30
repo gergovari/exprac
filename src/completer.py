@@ -33,7 +33,7 @@ class ConsoleCompleter(Completer):
         if cmd == ":sb":
             # Subcommand
             if arg_index == 1:
-                subcmds = ["add", "remove", "import", "export", "true", "false", "all"]
+                subcmds = ["add", "remove", "import", "export", "true", "false", "all", "search"]
                 for s in subcmds:
                     if s.startswith(current_word):
                         yield Completion(s, start_position=-len(current_word))

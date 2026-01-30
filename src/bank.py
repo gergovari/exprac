@@ -69,12 +69,19 @@ class StatementBank:
             return True
         return False
 
-    def get_filtered(self, filter_type: str = "all") -> List[StatementEntry]:
+    def get_filtered(self, filter_type: str = "all", search_query: str = "") -> List[StatementEntry]:
         if filter_type == "true":
-            return [s for s in self.statements if s.is_true]
+            base = [s for s in self.statements if s.is_true]
         elif filter_type == "false":
-            return [s for s in self.statements if not s.is_true]
-        return self.statements
+            base = [s for s in self.statements if not s.is_true]
+        else:
+            base = self.statements
+        
+        if search_query:
+            q = search_query.lower()
+            return [s for s in base if q in s.text.lower()]
+            
+        return base
 
     def import_from_file(self, path: str, default_truth: Optional[bool] = None) -> tuple[int, int]:
         added_count = 0
