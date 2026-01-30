@@ -64,11 +64,15 @@ class StatementChecker:
 
         known_true = []
         known_false = []
-        try:
-            with open(self.true_file, 'r') as f: known_true = [l.strip() for l in f]
-            with open(self.false_file, 'r') as f: known_false = [l.strip() for l in f]
-        except Exception:
-            pass 
+        if self.bank:
+            known_true = [s.text for s in self.bank.statements if s.is_true]
+            known_false = [s.text for s in self.bank.statements if not s.is_true]
+        else:
+            try:
+                with open(self.true_file, 'r') as f: known_true = [l.strip() for l in f]
+                with open(self.false_file, 'r') as f: known_false = [l.strip() for l in f]
+            except Exception:
+                pass 
 
         def on_update(msg):
             item.fuzzy_status = msg

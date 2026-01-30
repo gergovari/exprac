@@ -24,8 +24,9 @@ class ModelNotFoundError(Exception):
     pass
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: str = "gemini-2.5-flash", language: str = "English"):
         self.model_name = model_name
+        self.language = language
         self.provider_name = "gemini"
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
@@ -66,7 +67,7 @@ class GeminiProvider(LLMProvider):
 
         try:
             prompt = f"""
-            You are a verification assistant. Compare the input statement against the known true and false statements.
+            You are a verification assistant. Verify the 'Input Statement' using ONLY the provided 'Known True' and 'Known False' statements as your knowledge base.
             
             Known True: {json.dumps(known_true)}
             Known False: {json.dumps(known_false)}
@@ -74,12 +75,24 @@ class GeminiProvider(LLMProvider):
             Input Statement: "{statement}"
             
             Task:
-            1. Determine if the input statement is semantically very similar to any statement in the known lists.
-            2. If match found in Known True, result is True.
-            3. If match found in Known False, result is False.
-            4. If no clear match, result is null.
+            1. Semantically Equivalent: Treat statements as the same if they refer to the same attribute of the same subject, even if modifiers like "relatively", "basically", or "very" are present or absent.
+            2. Logical Implication:
+               - If a statement is Known False, its variations with weaker/stronger modifiers are likely also False.
+               - If "X is Y" is False, and Z is the opposite of Y, then "X is Z" might be True (if the domain implies binary options like fast/slow).
             
-            Return JSON only: {{"match_found": bool, "result": bool/null, "similar_to": "string or null"}}
+            Guidance:
+            - If "Tiger is relatively slow" is False, then "Tiger is slow" is also False.
+            - If "Tiger is slow" is False, "Tiger is fast" is likely True.
+            
+            Determine the truth value if ANY strong logical link exists.
+            IMPORTANT: The 'reason' field MUST be in {self.language} language.
+            
+            Return JSON only:
+            {{
+                "determined": boolean,   // true if you can determine the truth value based on the lists
+                "truth_value": boolean,  // true/false (if determined)
+                "reason": "explanation of the link or match"
+            }}
             """
             
             response = await self._generate_with_retry(prompt, on_update=on_update)
@@ -88,12 +101,12 @@ class GeminiProvider(LLMProvider):
                 text = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(text)
                 
-                if data.get("match_found"):
+                if data.get("determined"):
                     return {
                         "status": "found", 
-                        "result": data.get("result"), 
-                        "source": "Fuzzy Match", 
-                        "note": f"Similar to: {data.get('similar_to')}"
+                        "result": data.get("truth_value"), 
+                        "source": "Bank Inference", 
+                        "note": data.get("reason")
                     }
                 else:
                     return {"status": "not_found", "result": None, "source": "Fuzzy Match"}
@@ -110,7 +123,7 @@ class GeminiProvider(LLMProvider):
         try:
             prompt = f"""
             Verify the factual accuracy of this statement: "{statement}".
-            Return JSON only: {{"is_true": bool, "explanation": "short explanation"}}
+            Return JSON only: {{"is_true": bool, "explanation": "short explanation in {self.language}"}}
             """
             
             response = await self._generate_with_retry(prompt, on_update=on_update)

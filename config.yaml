@@ -1,4 +1,5 @@
 # LLM Provider Configuration
+language: Hungarian # Language for reasoning/explanations
 
 # Define available provider profiles here
 profiles:

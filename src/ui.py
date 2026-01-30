@@ -40,15 +40,30 @@ class VerificationView(View):
         table = Table(box=None, padding=(0, 2), expand=True)
         table.add_column("Statement", style="cyan", ratio=3)
         table.add_column("Exact Match", style="magenta", ratio=1)
-        table.add_column("Fuzzy Match", style="yellow", ratio=2)
-        table.add_column("AI Knowledge", style="green", ratio=2)
+        table.add_column("AI (Bank)", style="yellow", ratio=2)
+        table.add_column("AI (General)", style="green", ratio=2)
 
         for item in self.state.items:
+            def make_cell(status, detail):
+                t = Text()
+                s_style = "white"
+                st = str(status)
+                if st.startswith("True"): s_style = "bright_green"
+                elif st.startswith("False"): s_style = "bright_red"
+                elif st == "Not Found": s_style = "dim"
+                elif st.startswith("Error"): s_style = "red bold"
+                
+                t.append(st, style=s_style)
+                if detail:
+                    t.append("\n")
+                    t.append(str(detail), style="dim italic grey70")
+                return t
+
             table.add_row(
                 item.statement,
-                item.exact_status,
-                Text(item.fuzzy_status), 
-                Text(item.llm_status)
+                make_cell(item.exact_status, item.exact_detail),
+                make_cell(item.fuzzy_status, item.fuzzy_detail),
+                make_cell(item.llm_status, item.llm_detail)
             )
         return table
 

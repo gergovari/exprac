@@ -8,18 +8,20 @@ from src.ratelimit import RateLimitManager, GlobalRateLimitError
 class ProviderManager:
     def __init__(self, config_path="config.yaml"):
         self.providers = []
+        self.language = "English"
         self._load_config(config_path)
     
     def _load_config(self, path):
         if not os.path.exists(path):
             # Fallback default if no config
             print("Config not found, using default Gemini Flash")
-            self.providers.append(GeminiProvider(model_name="gemini-2.5-flash"))
+            self.providers.append(GeminiProvider(model_name="gemini-2.5-flash", language=self.language))
             return
 
         with open(path, 'r') as f:
             config = yaml.safe_load(f)
         
+        self.language = config.get('language', 'English')
         profiles = config.get('profiles', {})
         chain = config.get('chain', [])
         
@@ -47,7 +49,7 @@ class ProviderManager:
         model = entry.get('model')
         
         if provider_type == 'gemini':
-            self.providers.append(GeminiProvider(model_name=model))
+            self.providers.append(GeminiProvider(model_name=model, language=self.language))
         # Add other providers here
             
     async def execute_with_fallback(self, method_name: str, *args, on_update=None, **kwargs) -> Any:
