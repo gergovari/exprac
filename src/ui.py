@@ -13,6 +13,10 @@ from rich.table import Table
 from rich.text import Text
 from src.logic import StatementChecker
 from src.state import VerificationState
+from src.commands import (
+    CommandRegistry, QuitCommand, NextTabCommand, 
+    PrevTabCommand, SwitchTabCommand, VerifyStatementCommand
+)
 
 class View(ABC):
     def __init__(self, name: str):
@@ -24,7 +28,7 @@ class View(ABC):
 
 class VerificationView(View):
     def __init__(self, state: VerificationState):
-        super().__init__("ft") # Main view name
+        super().__init__("vs") # Main view name
         self.state = state
     
     def render(self, console: Console) -> Any:
@@ -44,21 +48,13 @@ class VerificationView(View):
         return table
 
 class HelpView(View):
-    def __init__(self):
+    def __init__(self, registry: CommandRegistry):
         super().__init__("help")
+        self.registry = registry
     
     def render(self, console: Console) -> Any:
         from rich.markdown import Markdown
-        HELP_TEXT = """
-# Help
-
-- `:ft "statement"`: Start verification
-- `:bn`: Next tab
-- `:bp`: Previous tab
-- `:b name`: Switch to tab
-- `:q`: Quit
-        """
-        return Markdown(HELP_TEXT)
+        return Markdown(self.registry.get_help_text())
 
 class ViewManager:
     def __init__(self):
@@ -92,10 +88,18 @@ class App:
         self.checker = StatementChecker("data") 
         self.running = True
         
+        # Command Registry
+        self.registry = CommandRegistry()
+        self.registry.register(QuitCommand())
+        self.registry.register(NextTabCommand())
+        self.registry.register(PrevTabCommand())
+        self.registry.register(SwitchTabCommand())
+        self.registry.register(VerifyStatementCommand())
+
         # View System
         self.view_manager = ViewManager()
         self.view_manager.add_view(VerificationView(self.state))
-        self.view_manager.add_view(HelpView())
+        self.view_manager.add_view(HelpView(self.registry))
 
         # Input buffer handling
         self.input_buffer = Buffer(multiline=False, accept_handler=self._handle_input)
@@ -156,44 +160,15 @@ class App:
         text = buff.text.strip()
         if not text:
             return
+        
+        # Execute via registry
+        # We spawn it as a task because execute is async and accept_handler can be sync/async,
+        # but prompt_toolkit usually expects a boolean return or None. 
+        # accept_handler can return True to keep buffer check? No.
+        # It's best to run async command in background task.
+        asyncio.create_task(self.registry.execute(text, self))
 
-        if text == ":q":
-            self.app.exit()
-            return
-            
-        if text == ":bn":
-            self.view_manager.next_view()
-            return
-
-        if text == ":bp":
-            self.view_manager.prev_view()
-            return
-            
-        if text.startswith(":b "):
-            name = text[3:].strip()
-            self.view_manager.switch_to(name)
-            return
-
-        if text.startswith(":ft "):
-            cmd_line = text[1:].strip()
-            # Simple fallback split for now if shlex fails, or strict shlex?
-            try:
-                parts = shlex.split(cmd_line)
-                args = parts[1:]
-            except ValueError:
-                # Fallback for unclosed quote
-                args = [cmd_line[3:].strip()]
-
-            for stmt in args:
-                if stmt:
-                    # Auto-switch to 'ft' view if not there
-                    self.view_manager.switch_to("ft")
-                    task = asyncio.create_task(self._process_new_item(stmt))
-            
-        elif text.startswith(":"):
-             pass
-
-    async def _process_new_item(self, stmt):
+    async def process_new_item(self, stmt):
         item = await self.state.add_item(stmt)
         self.checker.run_all_checks(item, self.state)
 
