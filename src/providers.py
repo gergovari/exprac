@@ -28,7 +28,39 @@ class GeminiProvider(LLMProvider):
         else:
             self.has_api_key = False
 
-    async def check_similarity(self, statement: str, known_true: List[str], known_false: List[str]) -> Dict[str, Any]:
+    async def _generate_with_retry(self, prompt: str, on_update=None) -> Any:
+        # Initial wait time 2s, retry forever
+        wait_time = 2
+        while True:
+            try:
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model='gemini-2.5-flash',
+                    contents=prompt
+                )
+                return response
+            except Exception as e:
+                # Basic check for rate limit in error message or type
+                # proper check: isinstance(e, errors.ClientError) and e.code == 429
+                if "429" in str(e) or "ResourceExhausted" in str(e):
+                    msg = f"Rate limit hit. Retrying in {wait_time}s..."
+                    if on_update:
+                        on_update(msg)
+                    else:
+                        print(f"\n[yellow]{msg}[/yellow]")
+                    
+                    await asyncio.sleep(wait_time)
+                    
+                    # Reset status if possible? Or just wait for the next attempt.
+                    if on_update:
+                        on_update("Retrying...")
+                        
+                    # Exponential backoff with a cap
+                    wait_time = min(wait_time * 2, 60)
+                else:
+                    raise e
+
+    async def check_similarity(self, statement: str, known_true: List[str], known_false: List[str], on_update=None) -> Dict[str, Any]:
         if not self.has_api_key:
              return {"status": "error", "message": "Missing API Key"}
 
@@ -50,11 +82,7 @@ class GeminiProvider(LLMProvider):
             Return JSON only: {{"match_found": bool, "result": bool/null, "similar_to": "string or null"}}
             """
             
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model='gemini-2.5-flash',
-                contents=prompt
-            )
+            response = await self._generate_with_retry(prompt, on_update=on_update)
             
             try:
                 text = response.text.replace("```json", "").replace("```", "").strip()
@@ -75,7 +103,7 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    async def verify_truth(self, statement: str) -> Dict[str, Any]:
+    async def verify_truth(self, statement: str, on_update=None) -> Dict[str, Any]:
         if not self.has_api_key:
              return {"status": "error", "message": "Missing API Key"}
 
@@ -85,11 +113,7 @@ class GeminiProvider(LLMProvider):
             Return JSON only: {{"is_true": bool, "explanation": "short explanation"}}
             """
             
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model='gemini-2.5-flash',
-                contents=prompt
-            )
+            response = await self._generate_with_retry(prompt, on_update=on_update)
             
             try:
                 text = response.text.replace("```json", "").replace("```", "").strip()
