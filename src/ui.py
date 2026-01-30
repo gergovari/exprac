@@ -210,47 +210,84 @@ class HelpView(View):
         from rich.console import Group
         from rich.align import Align
         from rich.text import Text
+        from rich.table import Table
+        from rich import box
 
         # Title
         title = Text("✨ Truth Verification Console Help ✨", style="bold magenta")
         
-        # Interaction Guide
-        nav_text = Text()
-        nav_text.append("Normal Mode\n", style="bold cyan underline")
-        nav_text.append("  TAB / S-TAB  ", style="yellow"); nav_text.append(": Switch View\n")
-        nav_text.append("  :            ", style="yellow"); nav_text.append(": Enter Command Mode\n")
-        nav_text.append("  Arrows       ", style="yellow"); nav_text.append(": Navigate Bank/List\n\n")
+        # 1. Navigation (Left Panel)
+        nav_table = Table(box=None, padding=(0, 1), show_header=False, expand=True)
+        nav_table.add_column("Key", style="yellow bold", width=12)
+        nav_table.add_column("Action", style="white")
         
-        nav_text.append("Command Mode\n", style="bold cyan underline")
-        nav_text.append("  ESC          ", style="yellow"); nav_text.append(": Cancel / Return to Normal\n")
-        nav_text.append("  ENTER        ", style="yellow"); nav_text.append(": Execute Command\n")
+        nav_table.add_row("TAB / S-TAB", "Switch Tab")
+        nav_table.add_row(":", "Enter Command Mode")
+        nav_table.add_row("ESC", "Exit / Clear Input")
+        nav_table.add_row("Arrows", "Navigate Lists")
+        nav_table.add_row("hjkl", "Vim Navigation")
+        nav_table.add_row("PgUp/Dn", "Scroll Page")
+        nav_table.add_row("Home/End", "Scroll Top/Bot")
         
-        nav_panel = Panel(nav_text, title="⌨️  Navigation & Keys", border_style="blue")
+        nav_panel = Panel(nav_table, title="⌨️  Navigation", border_style="blue", expand=True)
         
-        # Commands List
-        cmd_text = Text()
-        for name, cmd in self.registry.commands.items():
-            cmd_text.append(f"{name:<5} ", style="bold green")
-            cmd_text.append(f"{cmd.description}\n")
-            
-        cmd_panel = Panel(cmd_text, title="🚀 Commands", border_style="green")
+        # 2. Quick Actions (Right Panel)
+        alias_table = Table(box=None, padding=(0, 1), show_header=False, expand=True)
+        alias_table.add_column("Key", style="yellow bold", width=12)
+        alias_table.add_column("Action", style="white")
         
-        # Bank Guide
-        bank_text = Text()
-        bank_text.append("Statement Bank Navigation\n", style="bold cyan underline")
-        bank_text.append("  ← / →        ", style="yellow"); bank_text.append(": Cycle Filters (All/True/False)\n")
-        bank_text.append("  ↑ / ↓        ", style="yellow"); bank_text.append(": Scroll List\n")
+        alias_table.add_row(". <stmt>...", "Verify statement(s)")
+        alias_table.add_row("/ <query>", "Search Statement Bank")
+        alias_table.add_row("? <query>", "Search Statement Bank")
         
-        bank_panel = Panel(bank_text, title="💾 Statement Bank", border_style="magenta")
+        # Spacer for alignment
+        alias_table.add_row("", "") 
+        
+        alias_panel = Panel(alias_table, title="⚡ Quick Actions (Aliases)", border_style="cyan", expand=True)
 
+        # 3. Commands Detail
+        cmd_text = Text()
+        
+        # Legend
+        cmd_text.append("Syntax: ", style="bold")
+        cmd_text.append("<required> ", style="cyan"); cmd_text.append("[optional]\n\n", style="dim cyan")
+        
+        cmd_text.append("Core Commands:\n", style="bold underline")
+        cmd_text.append("  :vs <text>...   ", style="green"); cmd_text.append("Verify one or more statements (space separated)\n")
+        cmd_text.append("  :vs remove <id> ", style="green"); cmd_text.append("Remove item from verification queue\n\n")
+        
+        cmd_text.append("Statement Bank:\n", style="bold underline")
+        cmd_text.append("  :sb add <txt> <t/f>   ", style="green"); cmd_text.append("Add statement to bank\n")
+        cmd_text.append("  :sb remove <id>       ", style="green"); cmd_text.append("Remove statement from bank\n")
+        cmd_text.append("  :sb search <query>    ", style="green"); cmd_text.append("Filter bank entries\n")
+        cmd_text.append("  :sb import <file> [t] ", style="green"); cmd_text.append("Import lines (optional default truth)\n")
+        cmd_text.append("  :sb export <file>     ", style="green"); cmd_text.append("Export bank to file\n\n")
+
+        cmd_text.append("System:\n", style="bold underline")
+        cmd_text.append("  :bn / :bp   ", style="green"); cmd_text.append("Next / Previous Tab\n")
+        cmd_text.append("  :b <name>   ", style="green"); cmd_text.append("Switch tab by name (vs, sb, help)\n")
+        cmd_text.append("  :q          ", style="green"); cmd_text.append("Quit application")
+
+        cmd_panel = Panel(cmd_text, title="🚀 Command Reference", border_style="green", expand=True)
+
+        # 4. Glossary
+        glossary_text = Text()
+        glossary_text.append("Statement Bank: ", style="bold yellow"); glossary_text.append("Local database of known truths/falsehoods.\n")
+        glossary_text.append("Exact Match:    ", style="bold yellow"); glossary_text.append("Verifies against Bank using precise text.\n")
+        glossary_text.append("AI (Bank):      ", style="bold yellow"); glossary_text.append("Infers truth from Bank using AI logic (Fuzzy).\n")
+        glossary_text.append("AI (General):   ", style="bold yellow"); glossary_text.append("Uses AI's world knowledge to verify facts.\n")
+        
+        glossary_panel = Panel(glossary_text, title="📖 Glossary", border_style="white", expand=True)
+        
         # Layout
-        body = Columns([nav_panel, cmd_panel])
+        top_row = Columns([nav_panel, alias_panel], expand=True)
         
         return Group(
             Align.center(title),
             Text(""),
-            body,
-            bank_panel
+            top_row,
+            cmd_panel,
+            glossary_panel
         )
 
 class ViewManager:
@@ -303,6 +340,14 @@ class App:
         self.view_manager.add_view(VerificationView(self.state))
         self.view_manager.add_view(StatementBankView(self.bank))
         self.view_manager.add_view(HelpView(self.registry))
+
+        # Smart View Selection (Startup)
+        if self.state.items:
+            self.view_manager.switch_to("vs")
+        elif self.bank.statements:
+            self.view_manager.switch_to("sb")
+        else:
+            self.view_manager.switch_to("help")
 
         # Input buffer handling
         self.completer = create_completer(self.registry, self.bank)

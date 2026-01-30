@@ -171,16 +171,27 @@ class VerifyDotAliasCommand(Command):
         # Switch to vs view
         context.view_manager.switch_to("vs")
         
-        raw_query = " ".join(args)
-        query = raw_query.strip()
+        # Args come as a single string from registry special handling
+        raw_query = " ".join(args).strip()
         
-        if not query:
-            context.show_message("Error", "No statement provided.")
+        if not raw_query:
+            context.show_message("Error", "No statements provided.")
             return
 
-        # Treat the whole line as one statement
-        await context.process_new_item(query)
-        context.show_message("Info", f"Added: {query}")
+        try:
+            # Parse like command line arguments
+            statements = shlex.split(raw_query)
+        except ValueError:
+            # Fallback
+            statements = raw_query.split()
+
+        count = 0
+        for stmt in statements:
+            if stmt.strip():
+                await context.process_new_item(stmt)
+                count += 1
+                
+        context.show_message("Info", f"Added {count} statement(s).")
             
         # Autoscroll
         vs_view = None
