@@ -19,7 +19,7 @@ from src.state import VerificationState
 from src.commands import (
     CommandRegistry, QuitCommand, NextTabCommand, 
     PrevTabCommand, SwitchTabCommand, VerifyStatementCommand,
-    StatementBankCommand
+    StatementBankCommand, SearchAliasCommand
 )
 from src.completer import create_completer
 
@@ -241,6 +241,7 @@ class App:
         self.registry.register(SwitchTabCommand())
         self.registry.register(VerifyStatementCommand())
         self.registry.register(StatementBankCommand())
+        self.registry.register(SearchAliasCommand())
 
         # View System
         self.view_manager = ViewManager()
@@ -249,7 +250,7 @@ class App:
         self.view_manager.add_view(HelpView(self.registry))
 
         # Input buffer handling
-        self.completer = create_completer(self.registry)
+        self.completer = create_completer(self.registry, self.bank)
         self.input_buffer = Buffer(
             multiline=False, 
             accept_handler=self._handle_input,
@@ -270,11 +271,19 @@ class App:
                 return False
 
         # Mode Switching
+        # Mode Switching
         @self.kb.add(":")
         def _(event):
             if is_normal_mode_filter():
                 self.app.layout.focus(self.input_buffer)
                 self.input_buffer.text = ":"
+                self.input_buffer.cursor_position = 1
+
+        @self.kb.add("?")
+        def _(event):
+            if is_normal_mode_filter():
+                self.app.layout.focus(self.input_buffer)
+                self.input_buffer.text = "?"
                 self.input_buffer.cursor_position = 1
 
         @self.kb.add("escape")

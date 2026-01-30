@@ -114,8 +114,8 @@ class StatementBankCommand(Command):
                 context.show_message("Success", msg)
 
             elif subcmd == "search":
-                # :sb search "query"
-                query = args[1] if len(args) > 1 else ""
+                # :sb search "query" or :sb search query words
+                query = " ".join(args[1:]) if len(args) > 1 else ""
                 
                 # Find the view to update state
                 sb_view = None
@@ -140,6 +140,29 @@ class StatementBankCommand(Command):
         except Exception as e:
             context.show_message("Error", str(e))
 
+class SearchAliasCommand(Command):
+    def __init__(self):
+        super().__init__("?", "Search Statement Bank. Alias for :sb search.")
+
+    async def execute(self, context: Any, args: List[str]):
+        # Switch to sb view
+        context.view_manager.switch_to("sb")
+        
+        query = " ".join(args)
+        
+        # Find view
+        sb_view = None
+        for v in context.view_manager.views:
+            if v.name == "sb":
+                sb_view = v
+                break
+        
+        if sb_view:
+            sb_view.search_query = query
+            sb_view.scroll_offset = 0 
+            status = f"Filter set: {query}" if query else "Filter cleared"
+            context.show_message("Info", status)
+
 class CommandRegistry:
     def __init__(self):
         self.commands = {}
@@ -150,6 +173,15 @@ class CommandRegistry:
     async def execute(self, text: str, context: Any):
         text = text.strip()
         if not text: return
+        
+        # Special handling for ? alias (without space)
+        if text.startswith("?"):
+            cmd_name = "?"
+            rest = text[1:]
+            args = [rest] if rest else []
+            if cmd_name in self.commands:
+                await self.commands[cmd_name].execute(context, args)
+            return
 
         try:
             parts = shlex.split(text)
