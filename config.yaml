@@ -1,0 +1,24 @@
+# LLM Provider Configuration
+
+# Define available provider profiles here
+profiles:
+  gemini_2_5_flash:
+    provider: gemini
+    model: gemini-2.5-flash
+    api_key_env: GEMINI_API_KEY
+    
+  gemini_2_5_flash_lite:
+    provider: gemini
+    model: gemini-2.5-flash-lite
+    api_key_env: GEMINI_API_KEY
+
+  gemini_3_flash:
+    provider: gemini
+    model: gemini-3.0-flash
+    api_key_env: GEMINI_API_KEY
+
+# Define the execution order by listing profile names
+chain:
+  - gemini_2_5_flash
+  - gemini_2_5_flash_lite
+  - gemini_3_flash

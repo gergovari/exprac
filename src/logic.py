@@ -1,15 +1,15 @@
 from typing import List, Dict, Any
 import asyncio
 import os
-from src.providers import GeminiProvider
+from src.manager import ProviderManager
 from src.state import VerificationItem, VerificationState
 
 class StatementChecker:
     def __init__(self, data_dir: str):
         self.true_file = os.path.join(data_dir, "true_statements.txt")
         self.false_file = os.path.join(data_dir, "false_statements.txt")
-        # Initialize provider (could be dynamic later)
-        self.provider = GeminiProvider()
+        # Initialize manager
+        self.manager = ProviderManager()
 
     async def run_exact_check(self, item: VerificationItem, state: VerificationState):
         """Checks for an exact match and updates item."""
@@ -55,15 +55,22 @@ class StatementChecker:
             item.fuzzy_status = msg
             state.flag_changed()
 
-        res = await self.provider.check_similarity(item.statement, known_true, known_false, on_update=on_update)
-        
-        if res['status'] == 'found':
-            item.fuzzy_status = f"{res['result']} (Fuzzy)"
-            item.fuzzy_detail = res.get("note")
-        elif res['status'] == 'not_found':
-            item.fuzzy_status = "Not Found"
-        else:
-            item.fuzzy_status = f"Error: {res.get('message')}"
+        try:
+            res = await self.manager.execute_with_fallback(
+                'check_similarity', 
+                item.statement, known_true, known_false, 
+                on_update=on_update
+            )
+            
+            if res['status'] == 'found':
+                item.fuzzy_status = f"{res['result']} (Fuzzy)"
+                item.fuzzy_detail = res.get("note")
+            elif res['status'] == 'not_found':
+                item.fuzzy_status = "Not Found"
+            else:
+                item.fuzzy_status = f"Error: {res.get('message')}"
+        except Exception as e:
+            item.fuzzy_status = f"Error: {str(e)}"
         
         state.flag_changed()
 
@@ -76,13 +83,20 @@ class StatementChecker:
             item.llm_status = msg
             state.flag_changed()
 
-        res = await self.provider.verify_truth(item.statement, on_update=on_update)
-        
-        if res['status'] == 'found':
-            item.llm_status = f"{res['result']} (AI Knowledge)"
-            item.llm_detail = res.get("note")
-        else:
-            item.llm_status = f"Error: {res.get('message')}"
+        try:
+            res = await self.manager.execute_with_fallback(
+                'verify_truth', 
+                item.statement, 
+                on_update=on_update
+            )
+            
+            if res['status'] == 'found':
+                item.llm_status = f"{res['result']} (AI Knowledge)"
+                item.llm_detail = res.get("note")
+            else:
+                item.llm_status = f"Error: {res.get('message')}"
+        except Exception as e:
+             item.llm_status = f"Error: {str(e)}"
         
         state.flag_changed()
 

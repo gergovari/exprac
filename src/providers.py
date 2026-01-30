@@ -5,22 +5,25 @@ import json
 from typing import Dict, Any, List
 from google import genai
 from dotenv import load_dotenv
+from src.ratelimit import RateLimitManager, GlobalRateLimitError
 
 load_dotenv()
 
 class LLMProvider(ABC):
     @abstractmethod
-    async def check_similarity(self, statement: str, known_true: List[str], known_false: List[str]) -> Dict[str, Any]:
+    async def check_similarity(self, statement: str, known_true: List[str], known_false: List[str], on_update=None) -> Dict[str, Any]:
         """Checks if a statement is similar to known true/false lists."""
         pass
 
     @abstractmethod
-    async def verify_truth(self, statement: str) -> Dict[str, Any]:
+    async def verify_truth(self, statement: str, on_update=None) -> Dict[str, Any]:
         """Verifies the truth of a statement using general knowledge."""
         pass
 
 class GeminiProvider(LLMProvider):
-    def __init__(self):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
+        self.model_name = model_name
+        self.provider_name = "gemini"
         api_key = os.getenv("GEMINI_API_KEY")
         if api_key:
             self.client = genai.Client(api_key=api_key)
@@ -29,40 +32,31 @@ class GeminiProvider(LLMProvider):
             self.has_api_key = False
 
     async def _generate_with_retry(self, prompt: str, on_update=None) -> Any:
-        # Initial wait time 2s, retry forever
-        wait_time = 2
-        while True:
-            try:
-                response = await asyncio.to_thread(
-                    self.client.models.generate_content,
-                    model='gemini-2.5-flash',
-                    contents=prompt
-                )
-                return response
-            except Exception as e:
-                # Basic check for rate limit in error message or type
-                # proper check: isinstance(e, errors.ClientError) and e.code == 429
-                if "429" in str(e) or "ResourceExhausted" in str(e):
-                    msg = f"Rate limit hit. Retrying in {wait_time}s..."
-                    if on_update:
-                        on_update(msg)
-                    else:
-                        print(f"\n[yellow]{msg}[/yellow]")
-                    
-                    await asyncio.sleep(wait_time)
-                    
-                    # Reset status if possible? Or just wait for the next attempt.
-                    if on_update:
-                        on_update("Retrying...")
-                        
-                    # Exponential backoff with a cap
-                    wait_time = min(wait_time * 2, 60)
-                else:
-                    raise e
+        # Check global limit logic first
+        rl_manager = RateLimitManager()
+        wait_time = rl_manager.should_wait(self.provider_name, self.model_name)
+        if wait_time > 0:
+            raise GlobalRateLimitError(self.provider_name, self.model_name, wait_time)
+
+        try:
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt
+            )
+            return response
+        except Exception as e:
+            # Check for Rate Limit 429
+            if "429" in str(e) or "ResourceExhausted" in str(e):
+                # Report limit hit!
+                rl_manager.report_limit_hit(self.provider_name, self.model_name, cooldown_seconds=60)
+                raise GlobalRateLimitError(self.provider_name, self.model_name, 60)
+            else:
+                raise e
 
     async def check_similarity(self, statement: str, known_true: List[str], known_false: List[str], on_update=None) -> Dict[str, Any]:
         if not self.has_api_key:
-             return {"status": "error", "message": "Missing API Key"}
+             raise Exception("Missing API Key")
 
         try:
             prompt = f"""
@@ -98,14 +92,14 @@ class GeminiProvider(LLMProvider):
                 else:
                     return {"status": "not_found", "result": None, "source": "Fuzzy Match"}
             except json.JSONDecodeError:
-                 return {"status": "error", "message": "Invalid LLM Response"}
+                 raise ValueError("Invalid LLM Response")
 
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except GlobalRateLimitError:
+            raise
 
     async def verify_truth(self, statement: str, on_update=None) -> Dict[str, Any]:
         if not self.has_api_key:
-             return {"status": "error", "message": "Missing API Key"}
+             raise Exception("Missing API Key")
 
         try:
             prompt = f"""
@@ -126,7 +120,7 @@ class GeminiProvider(LLMProvider):
                     "note": data.get("explanation")
                 }
             except json.JSONDecodeError:
-                return {"status": "error", "message": "Invalid LLM Response"}
+                raise ValueError("Invalid LLM Response")
 
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except GlobalRateLimitError:
+            raise
