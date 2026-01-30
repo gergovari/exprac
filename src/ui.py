@@ -11,6 +11,7 @@ from prompt_toolkit.layout.controls import FormattedTextControl, BufferControl
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -35,23 +36,48 @@ class VerificationView(View):
     def __init__(self, state: VerificationState):
         super().__init__("vs") # Main view name
         self.state = state
+        self.scroll_offset = 0
     
+    def _get_page_size(self):
+        import shutil
+        height = shutil.get_terminal_size().lines
+        # Overhead approx 8-10 lines
+        return max(5, height - 10)
+
+    def scroll(self, direction: int):
+        items = self.state.items
+        page_size = self._get_page_size()
+        max_offset = max(0, len(items) - page_size)
+        self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
+
     def render(self, console: Console) -> Any:
+        from rich.console import Group
+        from rich.align import Align
+        
+        header = Text(" Verification Queue ", style="reverse bold magenta")
+
         table = Table(box=None, padding=(0, 2), expand=True)
+        table.add_column("ID", style="cyan", width=4, justify="right")
         table.add_column("Statement", style="cyan", ratio=3)
         table.add_column("Exact Match", style="magenta", ratio=1)
         table.add_column("AI (Bank)", style="yellow", ratio=2)
         table.add_column("AI (General)", style="green", ratio=2)
 
-        for item in self.state.items:
+        all_items = self.state.items
+        page_size = self._get_page_size()
+        visible_items = all_items[self.scroll_offset : self.scroll_offset + page_size]
+
+        for item in visible_items:
             def make_cell(status, detail):
                 t = Text()
                 s_style = "white"
                 st = str(status)
                 if st.startswith("True"): s_style = "bright_green"
                 elif st.startswith("False"): s_style = "bright_red"
+                elif st == "Pending": s_style = "dim yellow"
                 elif st == "Not Found": s_style = "dim"
                 elif st.startswith("Error"): s_style = "red bold"
+                elif st == "Checking...": s_style = "blue blink"
                 
                 t.append(st, style=s_style)
                 if detail:
@@ -60,12 +86,22 @@ class VerificationView(View):
                 return t
 
             table.add_row(
+                str(item.id),
                 item.statement,
                 make_cell(item.exact_status, item.exact_detail),
                 make_cell(item.fuzzy_status, item.fuzzy_detail),
                 make_cell(item.llm_status, item.llm_detail)
             )
-        return table
+        
+        meta_text = f"Total: {len(all_items)} | Index: {self.scroll_offset}"
+        
+        return Group(
+            Align.center(header),
+            Text(""), 
+            table,
+            Text(""),
+            Align.right(Text(meta_text, style="dim"))
+        )
 
 class StatementBankView(View):
     def __init__(self, bank: StatementBank):
@@ -270,7 +306,8 @@ class App:
             multiline=False, 
             accept_handler=self._handle_input,
             completer=self.completer,
-            complete_while_typing=False
+            complete_while_typing=False,
+            history=FileHistory('.command_history')
         )
         
         from prompt_toolkit.filters import Condition

@@ -48,10 +48,24 @@ class SwitchTabCommand(Command):
 
 class VerifyStatementCommand(Command):
     def __init__(self):
-        super().__init__(":vs", "Verify statements. Usage: :vs \"stmt1\" \"stmt2\"")
+        super().__init__(":vs", "Verify statements. Usage: :vs \"stmt1\" | :vs remove <id>")
 
     async def execute(self, context: Any, args: List[str]):
-        # Ensure we are on the verification tab
+        # Check for subcommands
+        if args and args[0] == "remove":
+            # Usage: :vs remove <id>
+            if len(args) < 2:
+                context.show_message("Error", "Usage: :vs remove <id>")
+                return
+            try:
+                sid = int(args[1])
+                await context.state.remove_item(sid)
+                context.show_message("Success", f"Item {sid} removed.")
+            except ValueError:
+                context.show_message("Error", "Invalid ID.")
+            return
+
+        # Normal verification flow
         context.view_manager.switch_to("vs")
         
         for stmt in args:
@@ -59,6 +73,15 @@ class VerifyStatementCommand(Command):
                 # We assume context (App) has a method to process items
                 # We'll need to expose `process_new_item` in App
                 await context.process_new_item(stmt)
+        
+        # Autoscroll to bottom
+        vs_view = None
+        for v in context.view_manager.views:
+            if v.name == "vs":
+                vs_view = v
+                break
+        if vs_view:
+            vs_view.scroll(99999)
 
 class StatementBankCommand(Command):
     def __init__(self):
