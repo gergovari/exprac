@@ -110,11 +110,20 @@ class ProviderManager:
             else:
                 wait_time = min(min_wait + 0.1, 60) # Add buffer, cap at 60
             
-            msg = f"All providers busy. Retrying in {wait_time:.1f}s..."
-            if on_update:
-                on_update(msg)
+            # Real-time countdown
+            remaining = wait_time
+            step = 0.2
+            while remaining > 0:
+                msg = f"Rate limited. Retrying in {remaining:.1f}s..."
+                if on_update:
+                    on_update(msg)
+                
+                to_sleep = min(remaining, step)
+                await asyncio.sleep(to_sleep)
+                remaining -= to_sleep
             
-            await asyncio.sleep(wait_time)
+            if on_update:
+                on_update("Retrying...")
             
             if on_update:
                 on_update("Retrying fallback chain...")
