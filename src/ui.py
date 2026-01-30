@@ -25,8 +25,9 @@ from src.commands import (
 from src.completer import create_completer
 
 class View(ABC):
-    def __init__(self, name: str):
+    def __init__(self, name: str, title: str = None):
         self.name = name
+        self.title = title or name
     
     @abstractmethod
     def render(self, console: Console) -> Any:
@@ -34,7 +35,7 @@ class View(ABC):
 
 class VerificationView(View):
     def __init__(self, state: VerificationState):
-        super().__init__("vs") # Main view name
+        super().__init__("vs", "✅ Verify Statements") # Main view name
         self.state = state
         self.scroll_offset = 0
     
@@ -105,7 +106,7 @@ class VerificationView(View):
 
 class StatementBankView(View):
     def __init__(self, bank: StatementBank):
-        super().__init__("sb")
+        super().__init__("sb", "📚 Statement Bank")
         self.bank = bank
         self.filter_modes = ["all", "true", "false"]
         self.current_filter_index = 0
@@ -199,7 +200,7 @@ class StatementBankView(View):
 
 class HelpView(View):
     def __init__(self, registry: CommandRegistry):
-        super().__init__("help")
+        super().__init__("help", "ℹ️  Help")
         self.registry = registry
     
     def render(self, console: Console) -> Any:
@@ -490,7 +491,7 @@ class App:
         """Renders the tab bar line."""
         parts = []
         for i, view in enumerate(self.view_manager.views):
-            name = view.name
+            name = view.title
             if i == self.view_manager.active_index:
                 # ANSI Reverse Video for selected tab
                 parts.append(f"\x1b[7m {name} \x1b[0m")
