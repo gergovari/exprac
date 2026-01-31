@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Any
+from prompt_toolkit.completion import Completion
 import shlex
 import asyncio
 
@@ -16,6 +17,10 @@ class Command(ABC):
         :param args: List of arguments passed to the command.
         """
         pass
+
+    def get_completions(self, completer: Any, text: str, args: List[str]):
+        """Yields completions for arguments."""
+        return []
 
 class QuitCommand(Command):
     def __init__(self):
@@ -46,17 +51,29 @@ class SwitchTabCommand(Command):
         if not args: return
         context.view_manager.switch_to(args[0])
 
-class VerifyStatementCommand(Command):
+class VerifierCommand(Command):
     def __init__(self):
-        super().__init__(":vs", "Verify statements. Usage: :vs \"stmt1\" | :vs remove <id>")
+        super().__init__(":sv", "Verify statements. Usage: :sv \"stmt1\" | :sv remove <id> | :sv retry <id>")
+
+    def get_completions(self, completer: Any, text: str, args: List[str]):
+        arg_index = len(args) - 1
+        
+        if arg_index == 0:
+            subcmds = ["remove", "retry", "clear"]
+            for s in subcmds:
+                if s.startswith(text):
+                    yield Completion(s, start_position=-len(text))
+            
+            # Also yield bank completions for statement verification
+            yield from completer.get_bank_completions(text)
 
     async def execute(self, context: Any, args: List[str]):
         # Check for subcommands
         # Check for subcommands
         if args and args[0] == "remove":
-            # Usage: :vs remove <id>
+            # Usage: :sv remove <id>
             if len(args) < 2:
-                context.show_message("Error", "Usage: :vs remove <id>")
+                context.show_message("Error", "Usage: :sv remove <id>")
                 return
             try:
                 sid = int(args[1])
@@ -66,10 +83,15 @@ class VerifyStatementCommand(Command):
                 context.show_message("Error", "Invalid ID.")
             return
 
+        elif args and args[0] == "clear":
+            await context.state.clear()
+            context.show_message("Success", "Verification queue cleared.")
+            return
+
         elif args and args[0] == "retry":
-            # Usage: :vs retry <id>
+            # Usage: :sv retry <id>
             if len(args) < 2:
-                context.show_message("Error", "Usage: :vs retry <id>")
+                context.show_message("Error", "Usage: :sv retry <id>")
                 return
             try:
                 sid = int(args[1])
@@ -80,7 +102,7 @@ class VerifyStatementCommand(Command):
             return
 
         # Normal verification flow
-        context.view_manager.switch_to("vs")
+        context.view_manager.switch_to("sv")
         
         for stmt in args:
             if stmt:
@@ -91,7 +113,7 @@ class VerifyStatementCommand(Command):
         # Autoscroll to bottom
         vs_view = None
         for v in context.view_manager.views:
-            if v.name == "vs":
+            if v.name == "sv":
                 vs_view = v
                 break
         if vs_view:
@@ -100,6 +122,31 @@ class VerifyStatementCommand(Command):
 class StatementBankCommand(Command):
     def __init__(self):
         super().__init__(":sb", "Statement Bank. Usage: :sb [add|remove|import|export|all|true|false]")
+
+    def get_completions(self, completer: Any, text: str, args: List[str]):
+        arg_index = len(args) - 1
+        
+        if arg_index == 0:
+            subcmds = ["add", "remove", "import", "export", "true", "false", "all", "search"]
+            for s in subcmds:
+                if s.startswith(text):
+                    yield Completion(s, start_position=-len(text))
+            return
+            
+        subcmd = args[0]
+        
+        if arg_index == 1:
+            if subcmd in ["import", "export"]:
+                yield from completer.get_path_completions(text)
+                
+        if arg_index == 2:
+            options = []
+            if subcmd in ["add", "import"]: options = ["true", "false"]
+            elif subcmd == "export": options = ["all", "true", "false"]
+            
+            for o in options:
+                if o.startswith(text):
+                    yield Completion(o, start_position=-len(text))
 
     async def execute(self, context: Any, args: List[str]):
         # Switch to tab first
@@ -179,28 +226,18 @@ class StatementBankCommand(Command):
 
 class VerifyDotAliasCommand(Command):
     def __init__(self):
-        super().__init__(".", "Verify statements. Alias for :vs.")
+        super().__init__(".", "Verify statements. Alias for :sv.")
 
     async def execute(self, context: Any, args: List[str]):
-        # Switch to vs view
-        context.view_manager.switch_to("vs")
+        # Switch to sv view
+        context.view_manager.switch_to("sv")
         
-        # Args come as a single string from registry special handling
-        raw_query = " ".join(args).strip()
-        
-        if not raw_query:
+        if not args:
             context.show_message("Error", "No statements provided.")
             return
 
-        try:
-            # Parse like command line arguments
-            statements = shlex.split(raw_query)
-        except ValueError:
-            # Fallback
-            statements = raw_query.split()
-
         count = 0
-        for stmt in statements:
+        for stmt in args:
             if stmt.strip():
                 await context.process_new_item(stmt)
                 count += 1
@@ -210,7 +247,7 @@ class VerifyDotAliasCommand(Command):
         # Autoscroll
         vs_view = None
         for v in context.view_manager.views:
-            if v.name == "vs":
+            if v.name == "sv":
                 vs_view = v
                 break
         if vs_view:
@@ -274,10 +311,21 @@ class CommandRegistry:
         if not text: return
         
         # Special handling for aliases ?, /, .
+        # Special handling for aliases ?, /, .
         if text.startswith("?") or text.startswith("/") or text.startswith("."):
             cmd_name = text[0]
-            rest = text[1:]
-            args = [rest] if rest else []
+            rest = text[1:].strip()
+            args = []
+            if rest:
+                # Smart parsing for . (Verify) to support multiple quoted args
+                if cmd_name == "." and ('"' in rest or "'" in rest):
+                    try:
+                        args = shlex.split(rest)
+                    except ValueError:
+                        args = [rest]
+                else:
+                    args = [rest]
+
             if cmd_name in self.commands:
                 await self.commands[cmd_name].execute(context, args)
             return
@@ -286,13 +334,28 @@ class CommandRegistry:
             parts = shlex.split(text)
         except ValueError:
             # Fallback for unclosed quote or parsing error
-            # Attempt to split by first space (simple command parsing)
             parts = text.split(" ", 1)
         
         if not parts: return
         
         cmd_name = parts[0]
         args = parts[1:]
+
+        # SMART PARSING LIMITATION:
+        # For verification/writing commands, we prefer "whole sentence" interpretation 
+        # if the user didn't explicitly quote.
+        smart_commands = [":sv", ":ew", ":vs"]
+        
+        # Exception: if it looks like a subcommand (remove/retry) for :sv/:vs, don't smart parse
+        is_subcommand = False
+        if cmd_name in [":sv", ":vs"]:
+             if text.startswith(f"{cmd_name} remove") or text.startswith(f"{cmd_name} retry"):
+                 is_subcommand = True
+
+        if cmd_name in smart_commands and ('"' not in text and "'" not in text) and not is_subcommand:
+             raw_parts = text.split(None, 1)
+             if len(raw_parts) > 1:
+                 args = [raw_parts[1]]
 
         if cmd_name in self.commands:
             await self.commands[cmd_name].execute(context, args)

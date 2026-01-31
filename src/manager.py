@@ -58,6 +58,12 @@ class ProviderManager:
         if provider_type == 'gemini':
             self.providers.append(GeminiProvider(api_key=api_key, model_name=model, language=self.language))
         # Add other providers here
+
+    def get_provider(self, name: str = "gemini") -> Any:
+        for p in self.providers:
+            if p.provider_name == name: return p
+        if self.providers: return self.providers[0]
+        return None
             
     async def execute_with_fallback(self, method_name: str, *args, on_update=None, **kwargs) -> Any:
         """
@@ -82,9 +88,17 @@ class ProviderManager:
                     continue
 
                 try:
-                    # Execute method
-                    method = getattr(provider, method_name)
-                    return await method(*args, on_update=on_update, **kwargs)
+                    # Execute method or generic task
+                    if callable(method_name):
+                        return await method_name(provider, on_update=on_update)
+                    elif method_name == 'generate_essay_wrapper':
+                        # This matches the call from essay_logic.py
+                        # We expect first arg to be the task function
+                        task_func = args[0]
+                        return await task_func(provider, on_update=on_update)
+                    else:
+                        method = getattr(provider, method_name)
+                        return await method(*args, on_update=on_update, **kwargs)
                 
                 except GlobalRateLimitError as e:
                     # Provider hit limit during execution

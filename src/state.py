@@ -5,7 +5,7 @@ from typing import List, Optional
 import asyncio
 
 @dataclass
-class VerificationItem:
+class VerifierItem:
     statement: str
     id: int = 0
     exact_status: str = "Pending"
@@ -17,9 +17,9 @@ class VerificationItem:
     fuzzy_detail: Optional[str] = None
     llm_detail: Optional[str] = None
 
-class VerificationState:
-    def __init__(self, persistence_file="data/vs_history.json"):
-        self.items: List[VerificationItem] = []
+class VerifierState:
+    def __init__(self, persistence_file="data/sv_history.json"):
+        self.items: List[VerifierItem] = []
         self._lock = asyncio.Lock()
         self.changed = True # Dirty flag for UI redraw
         self.persistence_file = persistence_file
@@ -38,7 +38,7 @@ class VerificationState:
                     # We might need to handle new fields (default values)
                     # Safe logic: **d works if d keys match fields. 
                     # If we add fields, d might lack them -> defaults used.
-                    item = VerificationItem(**d)
+                    item = VerifierItem(**d)
                     self.items.append(item)
         except Exception as e:
             print(f"Error loading VS history: {e}")
@@ -52,7 +52,7 @@ class VerificationState:
          except Exception as e:
              print(f"Error saving VS history: {e}")
 
-    async def add_item(self, statement: str) -> tuple[VerificationItem, bool]:
+    async def add_item(self, statement: str) -> tuple[VerifierItem, bool]:
         async with self._lock:
             # Dedup: Check existence
             existing = next((i for i in self.items if i.statement == statement), None)
@@ -68,7 +68,7 @@ class VerificationState:
             if self.items:
                  new_id = max(i.id for i in self.items) + 1
             
-            item = VerificationItem(statement=statement, id=new_id)
+            item = VerifierItem(statement=statement, id=new_id)
             self.items.append(item)
             self.changed = True
             self._save()
@@ -80,6 +80,12 @@ class VerificationState:
              self.changed = True
              self._save()
 
+    async def clear(self):
+         async with self._lock:
+             self.items = []
+             self.changed = True
+             self._save()
+
     # We generally object-reference modify items, so specific update methods 
     # might not be strictly needed if we pass the item to the worker, 
     # but having a method triggers the dirty flag.
@@ -87,7 +93,7 @@ class VerificationState:
         self.changed = True
         self._save()
 
-    def update_item(self, item: VerificationItem):
+    def update_item(self, item: VerifierItem):
         """Signal that an item has been updated."""
         self.changed = True
         self._save()

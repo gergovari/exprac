@@ -2,17 +2,17 @@ from typing import List, Dict, Any, Optional
 import asyncio
 import os
 from src.manager import ProviderManager
-from src.state import VerificationItem, VerificationState
+from src.state import VerifierItem, VerifierState
 from src.bank import StatementBank
 
 class StatementChecker:
-    def __init__(self, data_dir: str, bank: Optional[StatementBank] = None, api_keys: dict = None):
+    def __init__(self, data_dir: str, bank: Optional[StatementBank] = None, api_keys: dict = None, manager: ProviderManager = None):
         self.data_dir = data_dir
         self.bank = bank
         self.true_file = os.path.join(data_dir, "true_statements.txt")
         self.false_file = os.path.join(data_dir, "false_statements.txt")
         # Initialize manager with keys
-        self.manager = ProviderManager(api_keys=api_keys)
+        self.manager = manager if manager else ProviderManager(api_keys=api_keys)
 
     async def _check_file(self, file_path: str, statement: str) -> bool:
         try:
@@ -28,11 +28,11 @@ class StatementChecker:
         except FileNotFoundError:
             return []
 
-    def _update_fuzzy_loading(self, item: VerificationItem, state: VerificationState, msg: str):
+    def _update_fuzzy_loading(self, item: VerifierItem, state: VerifierState, msg: str):
         item.fuzzy_status = msg
         state.update_item(item)
 
-    async def run_exact_check(self, item: VerificationItem, state: VerificationState):
+    async def run_exact_check(self, item: VerifierItem, state: VerifierState):
         """Checks for an exact match and updates item."""
         item.exact_status = "Checking..."
         state.update_item(item) # Use update_item instead of flag_changed
@@ -57,7 +57,7 @@ class StatementChecker:
 
         state.update_item(item) # Use update_item instead of flag_changed
 
-    async def run_fuzzy_check(self, item: VerificationItem, state: VerificationState):
+    async def run_fuzzy_check(self, item: VerifierItem, state: VerifierState):
         """Checks for fuzzy match and updates item."""
         item.fuzzy_status = "Checking..."
         state.flag_changed()
@@ -97,7 +97,7 @@ class StatementChecker:
         
         state.flag_changed()
 
-    async def run_llm_check(self, item: VerificationItem, state: VerificationState):
+    async def run_llm_check(self, item: VerifierItem, state: VerifierState):
         """Checks truthfulness via LLM and updates item."""
         item.llm_status = "Checking..."
         state.flag_changed()
@@ -123,7 +123,7 @@ class StatementChecker:
         
         state.flag_changed()
 
-    def run_all_checks(self, item: VerificationItem, state: VerificationState):
+    def run_all_checks(self, item: VerifierItem, state: VerifierState):
         """Spawns all checks for an item."""
         asyncio.create_task(self.run_exact_check(item, state))
         asyncio.create_task(self.run_fuzzy_check(item, state))

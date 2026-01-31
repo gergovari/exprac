@@ -30,19 +30,26 @@ class GeminiProvider(LLMProvider):
             self.has_api_key = True
         else:
             self.has_api_key = False
+    def should_wait(self) -> float:
+        """Checks global rate limit state for this provider/model."""
+        return RateLimitManager().should_wait(self.provider_name, self.model_name)
 
-    async def _generate_with_retry(self, prompt: str, on_update=None) -> Any:
+    async def _generate_with_retry(self, prompt: str, files: List[Any] = None, on_update=None) -> Any:
         # Check global limit logic first
         rl_manager = RateLimitManager()
         wait_time = rl_manager.should_wait(self.provider_name, self.model_name)
         if wait_time > 0:
             raise GlobalRateLimitError(self.provider_name, self.model_name, wait_time)
 
+        contents = []
+        if files: contents.extend(files)
+        contents.append(prompt)
+
         try:
             response = await asyncio.to_thread(
                 self.client.models.generate_content,
                 model=self.model_name,
-                contents=prompt
+                contents=contents
             )
             return response
         except Exception as e:
@@ -139,3 +146,12 @@ class GeminiProvider(LLMProvider):
 
         except GlobalRateLimitError:
             raise
+
+    async def upload_file(self, path: str) -> Any:
+        if not self.has_api_key: raise Exception("Missing API Key")
+        # google-genai sdk: client.files.upload(path=...)
+        return await asyncio.to_thread(self.client.files.upload, path=path)
+
+    async def generate_essay(self, prompt: str, files: List[Any], on_update=None) -> str:
+        response = await self._generate_with_retry(prompt, files=files, on_update=on_update)
+        return response.text

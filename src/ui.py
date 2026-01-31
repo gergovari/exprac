@@ -17,16 +17,21 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from src.logic import StatementChecker
-from src.state import VerificationState
+from src.manager import ProviderManager
+from src.state import VerifierState
 from src.commands import (
     CommandRegistry, QuitCommand, NextTabCommand, 
-    PrevTabCommand, SwitchTabCommand, VerifyStatementCommand,
+    PrevTabCommand, SwitchTabCommand, VerifierCommand,
     StatementBankCommand, SearchAliasCommand, 
     VerifyDotAliasCommand, ForwardSearchAliasCommand
 )
 from src.completer import create_completer
+from src.essay_data import MaterialBank, EssayBank, EssaySession
+from src.essay_logic import EssayGenerator
+from src.essay_commands import MaterialBankCommand, EssayBankCommand, EssayWriterCommand
 
 class View(ABC):
+    use_cursor = False
     def __init__(self, name: str, title: str = None):
         self.name = name
         self.title = title or name
@@ -35,23 +40,55 @@ class View(ABC):
     def render(self, console: Console) -> Any:
         pass
 
-class VerificationView(View):
-    def __init__(self, state: VerificationState):
-        super().__init__("vs", "✅ Verify Statements") # Main view name
-        self.state = state
+    def handle_enter(self, app: Any):
+        """Handle Enter key press."""
+        pass
+
+class ScrollableListView(View):
+    def __init__(self, name: str, title: str):
+        super().__init__(name, title)
         self.scroll_offset = 0
-    
+        self.selected_index = 0
+
     def _get_page_size(self):
         import shutil
-        height = shutil.get_terminal_size().lines
-        # Overhead approx 8-10 lines
-        return max(5, height - 10)
+        return max(5, shutil.get_terminal_size().lines - 9)
+
+    def get_items(self) -> list:
+        return []
+
+    def move_selection(self, delta: int):
+        items = self.get_items()
+        if not items: return
+        
+        total = len(items)
+        self.selected_index = max(0, min(total - 1, self.selected_index + delta))
+        
+        page_size = self._get_page_size()
+        if self.selected_index < self.scroll_offset:
+            self.scroll_offset = self.selected_index
+        elif self.selected_index >= self.scroll_offset + page_size:
+            self.scroll_offset = max(0, self.selected_index - page_size + 1)
 
     def scroll(self, direction: int):
-        items = self.state.items
+        items = self.get_items()
         page_size = self._get_page_size()
         max_offset = max(0, len(items) - page_size)
         self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
+
+    def render_footer(self, total: int, visible: int):
+        from rich.align import Align
+        from rich.text import Text
+        txt = f"Showing {visible}/{total} | Index {self.scroll_offset}"
+        return Align.right(Text(txt, style="dim"))
+
+class VerifierView(ScrollableListView):
+    def __init__(self, state: VerifierState):
+        super().__init__("sv", "✅ Verify")
+        self.state = state
+    
+    def get_items(self) -> list:
+        return self.state.items
 
     def render(self, console: Console) -> Any:
         from rich.console import Group
@@ -70,7 +107,7 @@ class VerificationView(View):
         page_size = self._get_page_size()
         visible_items = all_items[self.scroll_offset : self.scroll_offset + page_size]
 
-        for item in visible_items:
+        for i, item in enumerate(visible_items):
             def make_cell(status, detail):
                 t = Text()
                 s_style = "white"
@@ -84,7 +121,7 @@ class VerificationView(View):
                 
                 t.append(st, style=s_style)
                 if detail:
-                    t.append("\n")
+                    t.append(" | ")
                     t.append(str(detail), style="dim italic grey70")
                 return t
 
@@ -96,32 +133,24 @@ class VerificationView(View):
                 make_cell(item.llm_status, item.llm_detail)
             )
         
-        meta_text = f"Total: {len(all_items)} | Index: {self.scroll_offset}"
-        
         return Group(
             Align.center(header),
             Text(""), 
             table,
             Text(""),
-            Align.right(Text(meta_text, style="dim"))
+            self.render_footer(len(all_items), len(visible_items))
         )
 
-class StatementBankView(View):
+class StatementBankView(ScrollableListView):
     def __init__(self, bank: StatementBank):
-        super().__init__("sb", "📚 Statement Bank")
+        super().__init__("sb", "📚 Bank")
         self.bank = bank
         self.filter_modes = ["all", "true", "false"]
         self.current_filter_index = 0
-        self.scroll_offset = 0
-        self.current_filter_index = 0
-        self.scroll_offset = 0
         self.search_query = ""
 
-    def _get_page_size(self):
-        import shutil
-        height = shutil.get_terminal_size().lines
-        # Overhead: Tabs(1)+Header(3)+Spacer(1)+Meta(1)+Status(1)+Input(1) = ~8. + Padding.
-        return max(5, height - 10)
+    def get_items(self) -> list:
+        return self.bank.get_filtered(self.filter_mode, self.search_query)
 
     @property
     def filter_mode(self):
@@ -131,16 +160,12 @@ class StatementBankView(View):
         if mode in self.filter_modes:
             self.current_filter_index = self.filter_modes.index(mode)
             self.scroll_offset = 0
+            self.selected_index = 0
 
     def cycle_filter(self, direction: int):
         self.current_filter_index = (self.current_filter_index + direction) % len(self.filter_modes)
         self.scroll_offset = 0
-
-    def scroll(self, direction: int):
-        items = self.bank.get_filtered(self.filter_mode, self.search_query)
-        page_size = self._get_page_size()
-        max_offset = max(0, len(items) - page_size)
-        self.scroll_offset = max(0, min(max_offset, self.scroll_offset + direction))
+        self.selected_index = 0
 
     def render(self, console: Console) -> Any:
         # Header showing Tabs
@@ -172,7 +197,7 @@ class StatementBankView(View):
         visible_items = all_items[self.scroll_offset : self.scroll_offset + page_size]
         
         import re
-        for item in visible_items:
+        for i, item in enumerate(visible_items):
             truth_str = "True" if item.is_true else "False"
             style = "green" if item.is_true else "red"
             
@@ -187,15 +212,12 @@ class StatementBankView(View):
 
             table.add_row(str(item.id), stmt_text, Text(truth_str, style=style))
 
-        # Scroll Indicator (Simple text based)
-        meta_text = f"Showing {len(visible_items)}/{len(all_items)} | Index {self.scroll_offset}"
-        
         return Group(
             Align.center(Text.from_ansi(header_str)), 
             Text(""), # Spacer
             table,
             Text(""),
-            Align.right(Text(meta_text, style="dim"))
+            self.render_footer(len(all_items), len(visible_items))
         )
 
 
@@ -292,13 +314,146 @@ class HelpView(View):
             glossary_panel
         )
 
+class MaterialBankView(ScrollableListView):
+    def __init__(self, bank: MaterialBank):
+        super().__init__("mb", "📂 Materials")
+        self.bank = bank
+
+    def get_items(self) -> list:
+        return self.bank.items
+
+    def render(self, console: Console) -> Any:
+        from rich.console import Group
+        from rich.table import Table
+        from rich.text import Text
+        
+        header = Text(" PDF Materials (for Essay Context) ", style="reverse bold blue")
+        
+        table = Table(box=None, padding=(0, 2), expand=True)
+        table.add_column("ID", style="cyan", width=4, justify="right")
+        table.add_column("Path", style="yellow")
+        
+        items = self.bank.items
+        page_size = self._get_page_size()
+        visible = items[self.scroll_offset : self.scroll_offset + page_size]
+        
+        for i, item in enumerate(visible):
+            table.add_row(str(item.id), item.path)
+            
+        return Group(header, Text(""), table, Text(""), self.render_footer(len(items), len(visible)))
+
+class EssayBankView(ScrollableListView):
+    use_cursor = True
+    def __init__(self, bank: EssayBank):
+        super().__init__("eb", "📚 Examples")
+        self.bank = bank
+
+    def get_items(self) -> list:
+        return self.bank.examples
+
+    def handle_enter(self, app: Any):
+        items = self.bank.examples
+        if not items: return
+        idx = self.selected_index
+        if 0 <= idx < len(items):
+            item = items[idx]
+            app.show_dialog("Example Detail", f"Q: {item.question}\n\nA:\n{item.answer}")
+
+    def render(self, console: Console) -> Any:
+        from rich.console import Group
+        from rich.table import Table
+        from rich.text import Text
+        
+        header = Text(" Essay Style Examples (Few-Shot) ", style="reverse bold green")
+        
+        table = Table(box=None, padding=(0, 2), expand=True)
+        table.add_column("ID", style="cyan", width=4, justify="right")
+        table.add_column("Question", style="white", ratio=1)
+        table.add_column("Answer Snippet", style="dim white", ratio=2)
+        
+        items = self.bank.examples
+        page_size = self._get_page_size()
+        visible = items[self.scroll_offset : self.scroll_offset + page_size]
+        
+        for i, item in enumerate(visible):
+            snippet = (item.answer[:50] + "...") if len(item.answer) > 50 else item.answer
+            
+            style = "reverse" if (i + self.scroll_offset == self.selected_index) else ""
+            table.add_row(str(item.id), item.question, snippet, style=style)
+            
+        return Group(header, Text(""), table, Text(""), self.render_footer(len(items), len(visible)))
+
+class EssayWriterView(ScrollableListView):
+    use_cursor = True
+    def __init__(self, session: EssaySession):
+        super().__init__("ew", "✍️  Writer")
+        self.session = session
+
+    def get_items(self) -> list:
+        return self.session.items
+
+    def handle_enter(self, app: Any):
+        items = self.session.items
+        if not items: return
+        idx = self.selected_index
+        if 0 <= idx < len(items):
+            item = items[idx]
+            app.show_dialog("Essay Detail", f"Q: {item.question}\n\nA:\n{item.answer or 'Generating...'}")
+
+    def render(self, console: Console) -> Any:
+        from rich.console import Group
+        from rich.table import Table
+        from rich.text import Text
+        
+        header = Text(" Essay Generator ", style="reverse bold magenta")
+        
+        table = Table(box=None, padding=(0, 2), expand=True, show_header=True)
+        table.add_column("ID", style="cyan", width=4, justify="right")
+        table.add_column("Question", style="white", ratio=2)
+        table.add_column("Status", style="yellow", ratio=2)
+        table.add_column("Answer Snippet", style="dim white", ratio=1)
+        
+        items = self.session.items
+        
+        page_size = self._get_page_size()
+        visible = items[self.scroll_offset : self.scroll_offset + page_size]
+        
+        for i, item in enumerate(visible):
+            status_style = "dim"
+            if item.status == "Generating...": status_style = "blue blink"
+            elif item.status == "Uploading...": status_style = "yellow blink"
+            elif item.status == "Done": status_style = "green"
+            elif item.status.startswith("Error"): status_style = "red"
+            
+            ans = item.answer or ""
+            snippet = (ans[:60] + "...") if len(ans) > 60 else ans
+            
+            row_style = "reverse" if (i + self.scroll_offset == self.selected_index) else ""
+            table.add_row(
+                str(item.id), 
+                item.question, 
+                Text(item.status, style=status_style), 
+                snippet, 
+                style=row_style
+            )
+            
+        return Group(header, Text(""), table, Text(""), self.render_footer(len(items), len(visible)))
+
 class ViewManager:
     def __init__(self):
+        self.groups = {
+            "Statements": [],
+            "Essays": [],
+            "Help": []
+        }
         self.views = []
         self.active_index = 0
     
-    def add_view(self, view: View):
+    def add_view(self, view: View, group: str = "Statements"):
         self.views.append(view)
+        if group not in self.groups:
+            self.groups[group] = []
+        self.groups[group].append(view)
         
     def next_view(self):
         self.active_index = (self.active_index + 1) % len(self.views)
@@ -326,9 +481,25 @@ class App:
         # Ensure data dir exists
         os.makedirs(self.data_path, exist_ok=True)
         
-        self.state = VerificationState()
+        # 1. Manager (with keys)
+        self.manager = ProviderManager(config_path="config.yaml", api_keys=api_keys)
+        
+        # 2. SV Components
+        self.state = VerifierState(os.path.join(self.data_path, "sv_history.json"))
         self.bank = StatementBank(os.path.join(self.data_path, "bank.csv")) 
-        self.checker = StatementChecker(self.data_path, bank=self.bank, api_keys=api_keys) 
+        self.checker = StatementChecker(self.data_path, bank=self.bank, manager=self.manager) 
+        
+        # 3. Essay Components
+        self.m_bank = MaterialBank(os.path.join(self.data_path, "materials.json"))
+        self.e_bank = EssayBank(os.path.join(self.data_path, "essay_examples.csv"))
+        self.e_session = EssaySession(os.path.join(self.data_path, "essay_history.json"))
+        
+        # Generator
+        gemini = self.manager.get_provider("gemini")
+        if not gemini and self.manager.providers: 
+             gemini = self.manager.providers[0] # Fallback
+        self.essay_generator = EssayGenerator(self.manager, self.m_bank, self.e_bank, self.e_session)
+
         self.running = True
         
         # Command Registry
@@ -337,21 +508,28 @@ class App:
         self.registry.register(NextTabCommand())
         self.registry.register(PrevTabCommand())
         self.registry.register(SwitchTabCommand())
-        self.registry.register(VerifyStatementCommand())
+        self.registry.register(VerifierCommand())
         self.registry.register(StatementBankCommand())
         self.registry.register(SearchAliasCommand())
         self.registry.register(VerifyDotAliasCommand())
         self.registry.register(ForwardSearchAliasCommand())
+        # Essay Commands
+        self.registry.register(MaterialBankCommand())
+        self.registry.register(EssayBankCommand())
+        self.registry.register(EssayWriterCommand())
 
         # View System
         self.view_manager = ViewManager()
-        self.view_manager.add_view(VerificationView(self.state))
-        self.view_manager.add_view(StatementBankView(self.bank))
-        self.view_manager.add_view(HelpView(self.registry))
+        self.view_manager.add_view(VerifierView(self.state), "Statements")
+        self.view_manager.add_view(StatementBankView(self.bank), "Statements")
+        self.view_manager.add_view(EssayWriterView(self.e_session), "Essays")
+        self.view_manager.add_view(MaterialBankView(self.m_bank), "Essays")
+        self.view_manager.add_view(EssayBankView(self.e_bank), "Essays")
+        self.view_manager.add_view(HelpView(self.registry), "Help")
 
         # Smart View Selection (Startup)
         if self.state.items:
-            self.view_manager.switch_to("vs")
+            self.view_manager.switch_to("sv")
         elif self.bank.statements:
             self.view_manager.switch_to("sb")
         else:
@@ -431,6 +609,12 @@ class App:
         def _(event):
             self.view_manager.prev_view()
 
+        @self.kb.add("enter", filter=is_normal_mode_filter)
+        def _(event):
+            view = self.view_manager.get_active()
+            if view:
+                view.handle_enter(self)
+
         # Arrow Navigation (Normal Mode Only)
         @self.kb.add("left", filter=is_normal_mode_filter)
         def _(event):
@@ -447,14 +631,20 @@ class App:
         @self.kb.add("up", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if isinstance(view, StatementBankView):
-                view.scroll(-1)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(-1)
+                else:
+                    view.scroll(-1)
 
         @self.kb.add("down", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if isinstance(view, StatementBankView):
-                view.scroll(1)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(1)
+                else:
+                    view.scroll(1)
 
         # Vim Navigation (h, j, k, l)
         @self.kb.add("h", filter=is_normal_mode_filter)
@@ -472,38 +662,56 @@ class App:
         @self.kb.add("k", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll"):
-                view.scroll(-1)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(-1)
+                else:
+                    view.scroll(-1)
 
         @self.kb.add("j", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll"):
-                view.scroll(1)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(1)
+                else:
+                    view.scroll(1)
 
         @self.kb.add("pageup", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll") and hasattr(view, "_get_page_size"):
-                view.scroll(-view._get_page_size())
+            if isinstance(view, ScrollableListView):
+                 if view.use_cursor:
+                    view.move_selection(-5)
+                 else:
+                    view.scroll(-5)
 
         @self.kb.add("pagedown", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll") and hasattr(view, "_get_page_size"):
-                view.scroll(view._get_page_size())
+            if isinstance(view, ScrollableListView):
+                 if view.use_cursor:
+                    view.move_selection(5)
+                 else:
+                    view.scroll(5)
 
         @self.kb.add("home", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll"):
-                view.scroll(-999999)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(-999999)
+                else:
+                    view.scroll(-999999)
 
         @self.kb.add("end", filter=is_normal_mode_filter)
         def _(event):
             view = self.view_manager.get_active()
-            if hasattr(view, "scroll"):
-                view.scroll(999999)
+            if isinstance(view, ScrollableListView):
+                if view.use_cursor:
+                    view.move_selection(999999)
+                else:
+                    view.scroll(999999)
 
         @self.kb.add("c-c")
         @self.kb.add("c-q")
@@ -565,6 +773,32 @@ class App:
         self.clear_task = asyncio.create_task(clear())
         self.app.invalidate()
 
+    def show_dialog(self, title: str, text: str):
+        from prompt_toolkit.widgets import Dialog, Button
+        from prompt_toolkit.layout.containers import Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.layout.containers import Float
+        
+        def close():
+            if self.root_container.floats:
+                self.root_container.floats.pop()
+            self.app.layout.focus(self.output_control)
+            self.app.invalidate()
+
+        close_btn = Button(text="Close", handler=close)
+
+        dialog = Float(content=Dialog(
+            title=title,
+            body=Window(FormattedTextControl(text), wrap_lines=True),
+            buttons=[close_btn],
+            modal=True,
+            width=80
+        ))
+        
+        self.root_container.floats.append(dialog)
+        self.app.layout.focus(close_btn)
+        self.app.invalidate()
+
     def _get_status_bar_text(self):
         """Render the status bar."""
         is_command = False
@@ -587,31 +821,44 @@ class App:
         return parts
 
     def _get_active_view_text(self):
-        """Renders the current view using Rich + Capture."""
-        view = self.view_manager.get_active()
-        if not view: return ""
-        
-        # Sync width to ensure expand=True works
-        import shutil
-        self.console.width = shutil.get_terminal_size().columns
-        
-        renderable = view.render(self.console)
-        
-        with self.console.capture() as capture:
-            self.console.print(renderable)
-        
-        return ANSI(capture.get())
+        """Renders the current view with a stable localized console to avoid output corruption."""
+        try:
+            view = self.view_manager.get_active()
+            if not view: return ""
+            
+            import shutil
+            from io import StringIO
+            from rich.console import Console as RichConsole
+            
+            # Use a fresh StringIO and fixed-width console for THIS render
+            # This prevents state leakage and ensures prompt_toolkit gets a clean string
+            cols = shutil.get_terminal_size().columns
+            out = StringIO()
+            temp_console = RichConsole(file=out, width=cols, force_terminal=True, highlight=False, color_system="auto")
+            
+            renderable = view.render(temp_console)
+            temp_console.print(renderable)
+            
+            return ANSI(out.getvalue())
+        except Exception as e:
+            return ANSI(f"\x1b[31mRender Error in {view.name if 'view' in locals() else 'unknown'}: {str(e)}\x1b[0m")
 
     def _get_tab_bar_text(self):
-        """Renders the tab bar line."""
+        """Renders the tab bar line cleanly with groups."""
         parts = []
-        for i, view in enumerate(self.view_manager.views):
-            name = view.title
-            if i == self.view_manager.active_index:
-                # ANSI Reverse Video for selected tab
-                parts.append(f"\x1b[7m {name} \x1b[0m")
-            else:
-                parts.append(f" {name} ")
+        for group_name, views in self.view_manager.groups.items():
+            if not views: continue
+            
+            # Restore Group Header
+            parts.append(f" [{group_name}] ")
+            
+            for view in views:
+                active = (view == self.view_manager.get_active())
+                name = view.title
+                if active:
+                    parts.append(f" \x1b[7m {name} \x1b[0m ")
+                else:
+                    parts.append(f" {name} ")
         return ANSI("".join(parts))
 
     def _handle_input(self, buff):
@@ -664,6 +911,7 @@ class App:
             return 
 
         count = 0
+        # Verifications
         for item in self.state.items:
             resumed = False
             # Exact
@@ -684,9 +932,19 @@ class App:
                  resumed = True
                 
             if resumed: count += 1
+
+        # Essays
+        def update_ui(msg=None):
+            self.app.invalidate()
+
+        for item in self.e_session.items:
+            s = str(item.status)
+            if s in ["Pending", "Starting...", "Uploading...", "Generating..."] or s.startswith("Rate"):
+                loop.create_task(self.essay_generator.run(item, on_update=update_ui))
+                count += 1
             
         if count > 0:
-            self.show_message("Info", f"Resumed {count} pending verifications.")
+            self.show_message("Info", f"Resumed {count} pending tasks.")
 
     async def run(self):
         # Resume pending items
