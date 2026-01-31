@@ -6,7 +6,7 @@ set -e
 
 # 1. Setup paths
 BASE_DIR=$(pwd)
-VERSION="v1.0"
+VERSION="v1.1"
 ARCH=$(uname -m)
 PACKAGING_DIR="$BASE_DIR/packaging"
 BUILD_TOOLS_DIR="$PACKAGING_DIR/build"
