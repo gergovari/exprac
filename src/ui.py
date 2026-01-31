@@ -275,21 +275,29 @@ class HelpView(View):
         cmd_text.append("Syntax: ", style="bold")
         cmd_text.append("<required> ", style="cyan"); cmd_text.append("[optional]\n\n", style="dim cyan")
         
-        cmd_text.append("Core Commands:\n", style="bold underline")
-        cmd_text.append("  :vs <text>...   ", style="green"); cmd_text.append("Verify one or more statements (space separated)\n")
-        cmd_text.append("  :vs remove <id> ", style="green"); cmd_text.append("Remove item from verification queue\n")
-        cmd_text.append("  :vs retry <id>  ", style="green"); cmd_text.append("Retry verification for specific item\n\n")
+        cmd_text.append("Statement Verification:\n", style="bold underline")
+        cmd_text.append("  :sv <stmt>...   ", style="green"); cmd_text.append("Verify one or more statements (space separated)\n")
+        cmd_text.append("  :sv remove <id> ", style="green"); cmd_text.append("Remove item from verification queue\n")
+        cmd_text.append("  :sv clear       ", style="green"); cmd_text.append("Clear all items from the verifier state\n")
+        cmd_text.append("  :sv retry <id>  ", style="green"); cmd_text.append("Retry all AI checks for specific item\n\n")
         
         cmd_text.append("Statement Bank:\n", style="bold underline")
         cmd_text.append("  :sb add <txt> <t/f>   ", style="green"); cmd_text.append("Add statement to bank\n")
         cmd_text.append("  :sb remove <id>       ", style="green"); cmd_text.append("Remove statement from bank\n")
-        cmd_text.append("  :sb search <query>    ", style="green"); cmd_text.append("Filter bank entries\n")
+        cmd_text.append("  :sb search <query>    ", style="green"); cmd_text.append("Filter bank entries (aliases: ?, /)\n")
         cmd_text.append("  :sb import <file> [t] ", style="green"); cmd_text.append("Import lines (optional default truth)\n")
         cmd_text.append("  :sb export <file>     ", style="green"); cmd_text.append("Export bank to file\n\n")
 
+        cmd_text.append("AI Essay Writing:\n", style="bold underline")
+        cmd_text.append("  :ew <question>        ", style="green"); cmd_text.append("Generate a new AI essay using Materials\n")
+        cmd_text.append("  :ew remove <id>       ", style="green"); cmd_text.append("Remove essay from the session history\n")
+        cmd_text.append("  :mb add <path>        ", style="green"); cmd_text.append("Add PDF/text to Material Bank (Context)\n")
+        cmd_text.append("  :mb remove <id>       ", style="green"); cmd_text.append("Remove material from the bank\n")
+        cmd_text.append("  :eb import <csv>      ", style="green"); cmd_text.append("Import previous essay examples for style\n\n")
+
         cmd_text.append("System:\n", style="bold underline")
         cmd_text.append("  :bn / :bp   ", style="green"); cmd_text.append("Next / Previous Tab\n")
-        cmd_text.append("  :b <name>   ", style="green"); cmd_text.append("Switch tab by name (vs, sb, help)\n")
+        cmd_text.append("  :b <name>   ", style="green"); cmd_text.append("Switch tab by name (sv, sb, ew, mb, eb, help)\n")
         cmd_text.append("  :q          ", style="green"); cmd_text.append("Quit application")
 
         cmd_panel = Panel(cmd_text, title="🚀 Command Reference", border_style="green", expand=True)
@@ -297,9 +305,9 @@ class HelpView(View):
         # 4. Glossary
         glossary_text = Text()
         glossary_text.append("Statement Bank: ", style="bold yellow"); glossary_text.append("Local database of known truths/falsehoods.\n")
-        glossary_text.append("Exact Match:    ", style="bold yellow"); glossary_text.append("Verifies against Bank using precise text.\n")
-        glossary_text.append("AI (Bank):      ", style="bold yellow"); glossary_text.append("Infers truth from Bank using AI logic (Fuzzy).\n")
-        glossary_text.append("AI (General):   ", style="bold yellow"); glossary_text.append("Uses AI's world knowledge to verify facts.\n")
+        glossary_text.append("Material Bank:  ", style="bold yellow"); glossary_text.append("PDFs/Documents used as context for Essay generation.\n")
+        glossary_text.append("Essay Examples: ", style="bold yellow"); glossary_text.append("Previous Q&A pairs used to guide AI writing style.\n")
+        glossary_text.append("Rate Limiting:  ", style="bold yellow"); glossary_text.append("Automatic fallback/wait when AI APIs are busy.\n")
         
         glossary_panel = Panel(glossary_text, title="📖 Glossary", border_style="white", expand=True)
         

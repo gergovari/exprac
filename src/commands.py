@@ -24,21 +24,21 @@ class Command(ABC):
 
 class QuitCommand(Command):
     def __init__(self):
-        super().__init__(":q", "Quit the application")
+        super().__init__(":q", "Exit the application.")
 
     async def execute(self, context: Any, args: List[str]):
         context.app.exit()
 
 class NextTabCommand(Command):
     def __init__(self):
-        super().__init__(":bn", "Switch to next tab")
+        super().__init__(":bn", "Focus the next view/tab.")
 
     async def execute(self, context: Any, args: List[str]):
         context.view_manager.next_view()
 
 class PrevTabCommand(Command):
     def __init__(self):
-        super().__init__(":bp", "Switch to previous tab")
+        super().__init__(":bp", "Focus the previous view/tab.")
 
     async def execute(self, context: Any, args: List[str]):
         context.view_manager.prev_view()
@@ -53,7 +53,7 @@ class SwitchTabCommand(Command):
 
 class VerifierCommand(Command):
     def __init__(self):
-        super().__init__(":sv", "Verify statements. Usage: :sv \"stmt1\" | :sv remove <id> | :sv retry <id>")
+        super().__init__(":sv", "Verify statements. Usage: `:sv \"statment\"` (supports multiple) | `:sv remove <id>` | `:sv clear` | `:sv retry <id>`")
 
     def get_completions(self, completer: Any, text: str, args: List[str]):
         arg_index = len(args) - 1
@@ -365,8 +365,33 @@ class CommandRegistry:
                 context.show_message("Error", f"Unknown command: {cmd_name}")
     
     def get_help_text(self) -> str:
-        """Generates markdown help text from registered commands."""
-        lines = ["# Help", ""]
-        for cmd in self.commands.values():
-            lines.append(f"- `{cmd.name}`: {cmd.description}")
+        """Generates markdown help text from registered commands and system features."""
+        lines = [
+            "# Navigation",
+            "- `Tab` / `Shift-Tab`: Switch between views (Tabs)",
+            "- `PageUp` / `PageDown`: Scroll through lists",
+            "- `Up` / `Down`: Move selection (in banks/lists)",
+            "- `Enter`: View details for selected item (in Verifier/Bank)",
+            "- `Ctrl-Q`: Quit application",
+            "",
+            "# Commands",
+            "Commands start with `:` followed by the command name.",
+        ]
+        
+        # Categorize commands
+        categories = {
+            "System": [":q", ":bn", ":bp", ":b"],
+            "Statement Verification": [":sv", ".", "?", "/"],
+            "Statement Bank": [":sb"],
+            "Essay Generation": [":ew", ":mb", ":eb"]
+        }
+        
+        # Mapping to help look up by category
+        for cat, names in categories.items():
+            lines.append(f"\n## {cat}")
+            for name in names:
+                if name in self.commands:
+                    cmd = self.commands[name]
+                    lines.append(f"- `{cmd.name}`: {cmd.description}")
+        
         return "\n".join(lines)

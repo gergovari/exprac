@@ -7,7 +7,7 @@ from src.essay_logic import EssayGenerator
 
 class MaterialBankCommand(Command):
     def __init__(self):
-        super().__init__(":mb", "Manage Material Bank. Usage: :mb add <path> | :mb remove <id>")
+        super().__init__(":mb", "Manage Material Bank (PDFs/context). Usage: `:mb add <path>` | `:mb remove <id>`")
 
     def get_completions(self, completer: Any, text: str, args: List[str]):
         arg_index = len(args) - 1
@@ -43,7 +43,7 @@ class MaterialBankCommand(Command):
 
 class EssayBankCommand(Command):
     def __init__(self):
-        super().__init__(":eb", "Manage Essay Bank. Usage: :eb import <csv> | :eb remove <id>")
+        super().__init__(":eb", "Manage Essay Bank (previous examples). Usage: `:eb import <csv>` | `:eb remove <id>`")
 
     def get_completions(self, completer: Any, text: str, args: List[str]):
         arg_index = len(args) - 1
@@ -77,7 +77,7 @@ class EssayBankCommand(Command):
 
 class EssayWriterCommand(Command):
     def __init__(self):
-        super().__init__(":ew", "Write Essay. Usage: :ew <question> | :ew remove <id>")
+        super().__init__(":ew", "Write AI Essays. Usage: `:ew <question>` | `:ew remove <id>`")
 
     def get_completions(self, completer: Any, text: str, args: List[str]):
         arg_index = len(args) - 1
