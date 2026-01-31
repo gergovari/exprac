@@ -448,7 +448,7 @@ class EssayWriterView(ScrollableListView):
         return Group(header, Text(""), table, Text(""), self.render_footer(len(items), len(visible)))
 
 class ViewManager:
-    def __init__(self):
+    def __init__(self, on_change=None):
         self.groups = {
             "Statements": [],
             "Essays": [],
@@ -456,6 +456,7 @@ class ViewManager:
         }
         self.views = []
         self.active_index = 0
+        self.on_change = on_change
     
     def add_view(self, view: View, group: str = "Statements"):
         self.views.append(view)
@@ -465,14 +466,17 @@ class ViewManager:
         
     def next_view(self):
         self.active_index = (self.active_index + 1) % len(self.views)
+        if self.on_change: self.on_change()
         
     def prev_view(self):
         self.active_index = (self.active_index - 1) % len(self.views)
+        if self.on_change: self.on_change()
         
     def switch_to(self, name: str) -> bool:
         for i, view in enumerate(self.views):
             if view.name == name:
                 self.active_index = i
+                if self.on_change: self.on_change()
                 return True
         return False
         
@@ -527,7 +531,7 @@ class App:
         self.registry.register(EssayWriterCommand())
 
         # View System
-        self.view_manager = ViewManager()
+        self.view_manager = ViewManager(on_change=self.save_ui_state)
         self.view_manager.add_view(VerifierView(self.state), "Statements")
         self.view_manager.add_view(StatementBankView(self.bank), "Statements")
         self.view_manager.add_view(EssayWriterView(self.e_session), "Essays")
@@ -535,13 +539,8 @@ class App:
         self.view_manager.add_view(EssayBankView(self.e_bank), "Essays")
         self.view_manager.add_view(HelpView(self.registry), "Help")
 
-        # Smart View Selection (Startup)
-        if self.state.items:
-            self.view_manager.switch_to("sv")
-        elif self.bank.statements:
-            self.view_manager.switch_to("sb")
-        else:
-            self.view_manager.switch_to("help")
+        # Startup Selection Logic
+        self._set_initial_view()
 
         # Input buffer handling
         self.completer = create_completer(self.registry, self.bank)
@@ -765,6 +764,49 @@ class App:
         self.status_type = "info"
         self.clear_task = None
 
+    def _set_initial_view(self):
+        """Logic to decide which tab to open on startup."""
+        ui_state_path = os.path.join(self.data_path, "ui_state.json")
+        sv_history = os.path.join(self.data_path, "sv_history.json")
+        essay_history = os.path.join(self.data_path, "essay_history.json")
+        
+        # 1. First run? (No histories)
+        if not os.path.exists(sv_history) and not os.path.exists(essay_history):
+            self.view_manager.switch_to("help")
+            return
+
+        # 2. Try loading last active tab
+        if os.path.exists(ui_state_path):
+            try:
+                with open(ui_state_path, 'r') as f:
+                    state = json.load(f)
+                    last_tab = state.get("last_active_tab")
+                    if last_tab and self.view_manager.switch_to(last_tab):
+                        return
+            except Exception:
+                pass
+
+        # 3. Default fallback: first tab with content
+        if self.state.items:
+            self.view_manager.switch_to("sv")
+        elif self.bank.statements:
+            self.view_manager.switch_to("sb")
+        else:
+            self.view_manager.switch_to("help")
+
+    def save_ui_state(self):
+        """Saves current UI state to disk."""
+        try:
+            active = self.view_manager.get_active()
+            if not active: return
+            
+            ui_state_path = os.path.join(self.data_path, "ui_state.json")
+            state = {"last_active_tab": active.name}
+            with open(ui_state_path, 'w') as f:
+                json.dump(state, f)
+        except Exception:
+            pass
+
     def show_message(self, title: str, text: str):
         """Display a message in the status bar."""
         self.status_type = "error" if title.lower() == "error" else "info"
@@ -852,22 +894,83 @@ class App:
             return ANSI(f"\x1b[31mRender Error in {view.name if 'view' in locals() else 'unknown'}: {str(e)}\x1b[0m")
 
     def _get_tab_bar_text(self):
-        """Renders the tab bar line cleanly with groups."""
-        parts = []
+        """Renders the tab bar line with horizontal scrolling if it overflows."""
+        import shutil
+        cols = shutil.get_terminal_size().columns
+        
+        # 1. Collect all segments (display_text, raw_len, is_active)
+        segments = []
+        active_segment_idx = -1
+        active_group_header_idx = -1
+        
         for group_name, views in self.view_manager.groups.items():
             if not views: continue
             
-            # Restore Group Header
-            parts.append(f" [{group_name}] ")
+            # Group Header
+            header = f" [{group_name}] "
+            header_idx = len(segments)
+            segments.append((header, len(header), False))
             
             for view in views:
-                active = (view == self.view_manager.get_active())
+                is_active = (view == self.view_manager.get_active())
                 name = view.title
-                if active:
-                    parts.append(f" \x1b[7m {name} \x1b[0m ")
+                if is_active:
+                    active_segment_idx = len(segments)
+                    active_group_header_idx = header_idx
+                    segments.append((f" \x1b[7m {name} \x1b[0m ", len(name) + 2, True))
                 else:
-                    parts.append(f" {name} ")
-        return ANSI("".join(parts))
+                    segments.append((f" {name} ", len(name) + 2, False))
+
+        if not segments: return ""
+
+        # 2. Determine visible window
+        # We want to fit within 'cols' (minus arrows)
+        max_w = cols - 4 # Reserve space for arrows " < " and " > "
+        
+        start_idx = getattr(self, "_tab_scroll_offset", 0)
+        
+        # Ensure active segment is visible by adjusting start_idx
+        # If moving LEFT, we want to ensure the group header is visible too if possible
+        target_view_idx = active_group_header_idx if active_group_header_idx != -1 else active_segment_idx
+        
+        if target_view_idx < start_idx:
+            start_idx = target_view_idx
+        
+        # If active is after window, move window right until it fits
+        while start_idx < active_segment_idx:
+            current_w = 0
+            for i in range(start_idx, active_segment_idx + 1):
+                current_w += segments[i][1]
+            if current_w > max_w:
+                start_idx += 1
+            else:
+                break
+        
+        self._tab_scroll_offset = start_idx # Persist
+
+        # 3. Build the final string
+        visible_parts = []
+        current_w = 0
+        end_idx = start_idx
+        
+        for i in range(start_idx, len(segments)):
+            seg_w = segments[i][1]
+            if current_w + seg_w > max_w:
+                if i == start_idx: # Edge case: single tab too wide
+                    visible_parts.append(segments[i][0])
+                    end_idx = i + 1
+                break
+            visible_parts.append(segments[i][0])
+            current_w += seg_w
+            end_idx = i + 1
+
+        final_text = "".join(visible_parts)
+        
+        # Add arrows
+        left_arrow = "\x1b[33m < \x1b[0m" if start_idx > 0 else "   "
+        right_arrow = "\x1b[33m > \x1b[0m" if end_idx < len(segments) else "   "
+        
+        return ANSI(f"{left_arrow}{final_text}{right_arrow}")
 
     def _handle_input(self, buff):
         text = buff.text.strip()
