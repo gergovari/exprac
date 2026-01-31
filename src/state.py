@@ -52,7 +52,7 @@ class VerificationState:
          except Exception as e:
              print(f"Error saving VS history: {e}")
 
-    async def add_item(self, statement: str) -> VerificationItem:
+    async def add_item(self, statement: str) -> tuple[VerificationItem, bool]:
         async with self._lock:
             # Dedup: Check existence
             existing = next((i for i in self.items if i.statement == statement), None)
@@ -61,7 +61,7 @@ class VerificationState:
                 self.items.append(existing) # Move to end
                 self.changed = True
                 self._save()
-                return existing
+                return existing, False
 
             # Assign ID
             new_id = 1
@@ -72,7 +72,7 @@ class VerificationState:
             self.items.append(item)
             self.changed = True
             self._save()
-            return item
+            return item, True
     
     async def remove_item(self, item_id: int):
          async with self._lock:

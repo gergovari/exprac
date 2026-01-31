@@ -52,6 +52,7 @@ class VerifyStatementCommand(Command):
 
     async def execute(self, context: Any, args: List[str]):
         # Check for subcommands
+        # Check for subcommands
         if args and args[0] == "remove":
             # Usage: :vs remove <id>
             if len(args) < 2:
@@ -61,6 +62,19 @@ class VerifyStatementCommand(Command):
                 sid = int(args[1])
                 await context.state.remove_item(sid)
                 context.show_message("Success", f"Item {sid} removed.")
+            except ValueError:
+                context.show_message("Error", "Invalid ID.")
+            return
+
+        elif args and args[0] == "retry":
+            # Usage: :vs retry <id>
+            if len(args) < 2:
+                context.show_message("Error", "Usage: :vs retry <id>")
+                return
+            try:
+                sid = int(args[1])
+                # context is App instance
+                await context.process_retry_item(sid)
             except ValueError:
                 context.show_message("Error", "Invalid ID.")
             return

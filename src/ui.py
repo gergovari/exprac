@@ -255,7 +255,8 @@ class HelpView(View):
         
         cmd_text.append("Core Commands:\n", style="bold underline")
         cmd_text.append("  :vs <text>...   ", style="green"); cmd_text.append("Verify one or more statements (space separated)\n")
-        cmd_text.append("  :vs remove <id> ", style="green"); cmd_text.append("Remove item from verification queue\n\n")
+        cmd_text.append("  :vs remove <id> ", style="green"); cmd_text.append("Remove item from verification queue\n")
+        cmd_text.append("  :vs retry <id>  ", style="green"); cmd_text.append("Retry verification for specific item\n\n")
         
         cmd_text.append("Statement Bank:\n", style="bold underline")
         cmd_text.append("  :sb add <txt> <t/f>   ", style="green"); cmd_text.append("Add statement to bank\n")
@@ -625,8 +626,29 @@ class App:
         asyncio.create_task(self.registry.execute(text, self))
 
     async def process_new_item(self, stmt):
-        item = await self.state.add_item(stmt)
+        item, is_new = await self.state.add_item(stmt)
+        if is_new:
+            self.checker.run_all_checks(item, self.state)
+        # Else: Just focused (moved to end), no checks rerun.
+    
+    async def process_retry_item(self, item_id: int):
+        # Find item
+        item = next((i for i in self.state.items if i.id == item_id), None)
+        if not item:
+            self.show_message("Error", f"Item {item_id} not found.")
+            return
+
+        # Reset statuses
+        item.exact_status = "Pending"
+        item.fuzzy_status = "Pending"
+        item.llm_status = "Pending"
+        item.exact_detail = None
+        item.fuzzy_detail = None
+        item.llm_detail = None
+        
+        self.state.update_item(item)
         self.checker.run_all_checks(item, self.state)
+        self.show_message("Success", f"Retrying verification for {item_id}.")
 
     async def _refresh_loop(self):
         """Force UI refresh periodically."""
