@@ -6,7 +6,7 @@ set -e
 
 # 1. Setup paths
 BASE_DIR=$(pwd)
-VERSION="v1.5"
+VERSION="v1.6"
 ARCH="x86_64" 
 PACKAGING_DIR="$BASE_DIR/packaging"
 
@@ -39,7 +39,7 @@ mkdir -p "$WIN_BUILD_DIR" "$WIN_DIST_DIR" "$DIST_DIR"
 
 # 4. Running PyInstaller via Docker/Podman
 echo "🛠️ Building EXE with PyInstaller in $DOCKER_CMD..."
-$DOCKER_CMD run --rm \
+$DOCKER_CMD run --rm --network host \
     -v "$BASE_DIR:/src:Z" \
     docker.io/batonogov/pyinstaller-windows \
     "python -m pip install Pillow && python -m pip install -r requirements.txt && pyinstaller --workpath build/windows_build --distpath build/windows_dist packaging/ExPrac.spec"
