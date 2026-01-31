@@ -94,3 +94,16 @@ python main.py
 - **Material Bank**: The "Brain" for your essays. Add source documents here.
 - **Essay Bank**: The "Voice" for your essays. Add examples of your writing style here.
 - **Statement Bank**: Your local "Truth Source" for fact-checking.
+
+---
+
+## ⚠️ Troubleshooting
+
+### Windows Defender / SmartScreen Warning
+When running the `ExPrac.exe` file, you may see a "Windows protected your PC" popup. This is normal for open-source software that hasn't purchased an expensive code-signing certificate.
+
+**To run the app:**
+1. Click **More Info** on the blue popup.
+2. Click **Run Anyway**.
+
+This only happens the first time you run a new version. The application is completely local and safe.

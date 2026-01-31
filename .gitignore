@@ -5,3 +5,5 @@ output*
 *.AppImage
 build/*
 dist/*
+*data*
+build_log*

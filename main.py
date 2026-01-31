@@ -8,10 +8,40 @@ from src.ratelimit import RateLimitManager
 
 CONFIG_PATH = "config.yaml"
 
+DEFAULT_CONFIG = {
+    "language": "Hungarian",
+    "data_path": "./data",
+    "profiles": {
+        "gemini_2_5_flash": {
+            "provider": "gemini",
+            "model": "gemini-2.5-flash",
+            "api_key_name": "gemini"
+        },
+        "gemini_2_5_flash_lite": {
+            "provider": "gemini",
+            "model": "gemini-2.5-flash-lite",
+            "api_key_name": "gemini"
+        },
+        "gemini_3_flash": {
+            "provider": "gemini",
+            "model": "gemini-3-flash-preview",
+            "api_key_name": "gemini"
+        }
+    },
+    "chain": [
+        "gemini_2_5_flash",
+        "gemini_2_5_flash_lite",
+        "gemini_3_flash"
+    ]
+}
+
 def load_config():
     if not os.path.exists(CONFIG_PATH):
-        print(f"Error: {CONFIG_PATH} not found.")
-        return {}
+        print(f"[{CONFIG_PATH}] not found. Creating default configuration...")
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.dump(DEFAULT_CONFIG, f, default_flow_style=False)
+        return DEFAULT_CONFIG
+        
     with open(CONFIG_PATH, 'r') as f:
         return yaml.safe_load(f)
 

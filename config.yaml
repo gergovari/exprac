@@ -1,26 +1,19 @@
-# Global Configuration
+chain:
+- gemini_2_5_flash
+- gemini_2_5_flash_lite
+- gemini_3_flash
+data_path: ./data
 language: Hungarian
-data_path: "./data"
-
-# Define available provider profiles here
 profiles:
   gemini_2_5_flash:
-    provider: gemini
+    api_key_name: gemini
     model: gemini-2.5-flash
-    api_key_name: gemini
-    
+    provider: gemini
   gemini_2_5_flash_lite:
-    provider: gemini
+    api_key_name: gemini
     model: gemini-2.5-flash-lite
-    api_key_name: gemini
-
-  gemini_3_flash:
     provider: gemini
-    model: gemini-3-flash-preview
+  gemini_3_flash:
     api_key_name: gemini
-
-# Define the execution order by listing profile names
-chain:
-  - gemini_2_5_flash
-  - gemini_2_5_flash_lite
-  - gemini_3_flash
+    model: gemini-3-flash-preview
+    provider: gemini

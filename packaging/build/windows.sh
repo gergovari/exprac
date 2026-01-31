@@ -46,7 +46,8 @@ $DOCKER_CMD run --rm \
 
 # 5. Finalize output
 echo "📂 Finalizing executable..."
-GENERATED_EXE=$(find "$WIN_DIST_DIR/ExPrac" -name "*.exe" | head -n 1)
+# In onefile mode, the EXE is directly in distpath, not in a subdirectory.
+GENERATED_EXE=$(find "$WIN_DIST_DIR" -maxdepth 1 -name "*.exe" | head -n 1)
 
 if [ -f "$GENERATED_EXE" ]; then
     cp "$GENERATED_EXE" "$OUT_PATH"

@@ -753,7 +753,7 @@ class App:
             layout=self.layout,
             key_bindings=self.kb,
             full_screen=True,
-            mouse_support=False,
+            mouse_support=True,
             refresh_interval=0.1
         )
         # Start in Normal Mode
@@ -824,12 +824,13 @@ class App:
         self.app.invalidate()
 
     def show_dialog(self, title: str, text: str):
-        from prompt_toolkit.widgets import Dialog, Button
+        from prompt_toolkit.widgets import Dialog, Button, TextArea
         from prompt_toolkit.layout.containers import Window
         from prompt_toolkit.layout.controls import FormattedTextControl
         from prompt_toolkit.layout.containers import Float
+        from prompt_toolkit.key_binding import KeyBindings
         
-        def close():
+        def close(event=None):
             if self.root_container.floats:
                 self.root_container.floats.pop()
             self.app.layout.focus(self.output_control)
@@ -837,16 +838,118 @@ class App:
 
         close_btn = Button(text="Close", handler=close)
 
+        # Custom bindings for the dialog
+        kb = KeyBindings()
+
+        def try_move_down(event):
+            buff = event.current_buffer
+            doc = buff.document
+            
+            if doc.cursor_position_row == doc.line_count - 1:
+                 self.app.layout.focus(close_btn)
+            else:
+                 buff.cursor_down()
+
+        @kb.add("j")
+        @kb.add("down")
+        def _(event):
+            try_move_down(event)
+
+        @kb.add("k")
+        def _(event):
+            event.current_buffer.cursor_up()
+
+        @kb.add("h")
+        def _(event):
+            event.current_buffer.cursor_left()
+
+        @kb.add("l")
+        def _(event):
+            event.current_buffer.cursor_right()
+            
+        @kb.add("home")
+        def _(event):
+             event.current_buffer.cursor_position = 0
+
+        @kb.add("end")
+        def _(event):
+             event.current_buffer.cursor_position = len(event.current_buffer.text)
+             self.app.layout.focus(close_btn)
+        
+        @kb.add("pagedown")
+        def _(event):
+            buff = event.current_buffer
+            doc = buff.document
+            if doc.cursor_position_row == doc.line_count - 1:
+                self.app.layout.focus(close_btn)
+            else:
+                 try:
+                    w = event.app.layout.current_window
+                    if w and w.render_info:
+                        buff.cursor_down(count=w.render_info.window_height)
+                    else:
+                        buff.cursor_down(count=10)
+                 except:
+                    buff.cursor_down(count=10)
+
+        @kb.add("c-c")
+        @kb.add("q")
+        @kb.add("escape")
+        def _(event):
+            close()
+
+        text_area = TextArea(
+            text=text,
+            read_only=True,
+            scrollbar=True,
+            focusable=True
+        )
+        
+        # Attach key bindings to text area
+        text_area.window.content.key_bindings = kb
+
+        # Custom bindings for the button (to allow going back up)
+        btn_kb = KeyBindings()
+        
+        @btn_kb.add("up")
+        @btn_kb.add("k")
+        @btn_kb.add("pageup")
+        @btn_kb.add("home")
+        def _(event):
+            self.app.layout.focus(text_area)
+            # Optional: when jumping back with Home, we might want to scroll to top?
+            # User request: "home put us back at text". 
+            # If I just focus, cursor stays where it was.
+            # But usually 'Home' implies top.
+            # I will check if I should also move cursor to 0. 
+            # The user request is brief. Standard behavior for Home is going to start.
+            # So I will also set cursor to 0.
+            text_area.buffer.cursor_position = 0
+
+        @btn_kb.add("enter")
+        @btn_kb.add("space")
+        def _(event):
+            close()
+            
+        # Attach key bindings to close button
+        # Button.window is a Window, its content is the Control
+        try:
+             close_btn.window.content.key_bindings = btn_kb
+        except:
+             pass 
+
+
         dialog = Float(content=Dialog(
             title=title,
-            body=Window(FormattedTextControl(text), wrap_lines=True),
+            body=text_area,
             buttons=[close_btn],
             modal=True,
-            width=80
+            width=80,
+            with_background=True
         ))
         
         self.root_container.floats.append(dialog)
-        self.app.layout.focus(close_btn)
+        self.app.layout.focus(text_area)
         self.app.invalidate()
 
     def _get_status_bar_text(self):
