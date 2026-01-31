@@ -6,7 +6,7 @@ set -e
 
 # 1. Setup paths
 BASE_DIR=$(pwd)
-VERSION="v1.4"
+VERSION="v1.5"
 ARCH=$(uname -m)
 PACKAGING_DIR="$BASE_DIR/packaging"
 BUILD_TOOLS_DIR="$PACKAGING_DIR/build"
@@ -47,7 +47,7 @@ pyinstaller --workpath "$PYBUILD_DIR" \
 # 5. Prepare AppDir
 echo "📂 Preparing AppDir structure..."
 mkdir -p "$APPDIR"
-cp -r "$PYDIST_DIR/ExPrac"/* "$APPDIR/"
+cp "$PYDIST_DIR/ExPrac" "$APPDIR/"
 cp "$PACKAGING_DIR/AppRun" "$APPDIR/"
 cp "$PACKAGING_DIR/exprac.desktop" "$APPDIR/"
 cp "$PACKAGING_DIR/icon.png" "$APPDIR/"
