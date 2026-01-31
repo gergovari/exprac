@@ -166,3 +166,6 @@ class EssaySession:
         self.items.append(item)
         self.save()
         return item
+    def remove_item(self, item_id: int):
+        self.items = [i for i in self.items if i.id != item_id]
+        self.save()

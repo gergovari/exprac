@@ -348,7 +348,7 @@ class CommandRegistry:
         
         # Exception: if it looks like a subcommand (remove/retry) for :sv/:vs, don't smart parse
         is_subcommand = False
-        if cmd_name in [":sv", ":vs"]:
+        if cmd_name in [":sv", ":vs", ":ew"]:
              if text.startswith(f"{cmd_name} remove") or text.startswith(f"{cmd_name} retry"):
                  is_subcommand = True
 

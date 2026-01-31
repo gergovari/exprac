@@ -77,11 +77,30 @@ class EssayBankCommand(Command):
 
 class EssayWriterCommand(Command):
     def __init__(self):
-        super().__init__(":ew", "Write Essay. Usage: :ew <question>")
+        super().__init__(":ew", "Write Essay. Usage: :ew <question> | :ew remove <id>")
+
+    def get_completions(self, completer: Any, text: str, args: List[str]):
+        arg_index = len(args) - 1
+        if arg_index == 0:
+            if "remove".startswith(text):
+                yield Completion("remove", start_position=-len(text))
 
     async def execute(self, context: Any, args: List[str]):
         if not args:
             context.view_manager.switch_to("ew")
+            return
+
+
+        if args[0] == "remove":
+            if len(args) < 2:
+                context.show_message("Error", "Usage: :ew remove <id>")
+                return
+            try:
+                item_id = int(args[1])
+                context.e_session.remove_item(item_id)
+                context.show_message("Success", f"Removed essay query {item_id}")
+            except ValueError:
+                context.show_message("Error", "Invalid ID")
             return
 
         question = " ".join(args)
