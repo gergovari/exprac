@@ -2,3 +2,6 @@
 data/*
 output*
 *.swpdata/command_history
+*.AppImage
+build/*
+dist/*

@@ -1,0 +1,21 @@
+#!/bin/sh
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+
+# Check if we have a terminal
+if [ -t 0 ]; then
+    # Already in a terminal, just run
+    exec "$HERE/ExPrac.AppImage" "$@"
+else
+    # Not in a terminal, try to spawn one
+    if command -v x-terminal-emulator >/dev/null 2>&1; then
+        exec x-terminal-emulator -e "$HERE/ExPrac.AppImage" "$@"
+    elif command -v gnome-terminal >/dev/null 2>&1; then
+        exec gnome-terminal -- "$HERE/ExPrac.AppImage" "$@"
+    elif command -v xterm >/dev/null 2>&1; then
+        exec xterm -e "$HERE/ExPrac.AppImage" "$@"
+    else
+        # Fallback to just running, might fail to show UI if no TTY
+        exec "$HERE/ExPrac.AppImage" "$@"
+    fi
+fi
