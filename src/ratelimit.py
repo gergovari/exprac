@@ -6,6 +6,12 @@ from typing import Dict, Tuple
 class RateLimitManager:
     _instance = None
     _file_path = "data/ratelimits.json"
+
+    @classmethod
+    def set_data_path(cls, data_path: str):
+        cls._file_path = os.path.join(data_path, "ratelimits.json")
+        if cls._instance:
+            cls._instance._load()
     
     def __new__(cls):
         if cls._instance is None:

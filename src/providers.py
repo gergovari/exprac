@@ -1,13 +1,9 @@
 from abc import ABC, abstractmethod
-import os
 import asyncio
 import json
 from typing import Dict, Any, List
 from google import genai
-from dotenv import load_dotenv
 from src.ratelimit import RateLimitManager, GlobalRateLimitError
-
-load_dotenv()
 
 class LLMProvider(ABC):
     @abstractmethod
@@ -24,11 +20,11 @@ class ModelNotFoundError(Exception):
     pass
 
 class GeminiProvider(LLMProvider):
-    def __init__(self, model_name: str = "gemini-2.5-flash", language: str = "English"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash", language: str = "English"):
         self.model_name = model_name
         self.language = language
         self.provider_name = "gemini"
-        api_key = os.getenv("GEMINI_API_KEY")
+        
         if api_key:
             self.client = genai.Client(api_key=api_key)
             self.has_api_key = True

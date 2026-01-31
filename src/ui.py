@@ -1,5 +1,6 @@
 import asyncio
 import shlex
+import os
 from abc import ABC, abstractmethod
 from prompt_toolkit import Application
 from prompt_toolkit.layout.containers import HSplit, Window, FloatContainer, Float
@@ -316,11 +317,17 @@ class ViewManager:
         return self.views[self.active_index]
 
 class App:
-    def __init__(self):
+    def __init__(self, config: dict = None, api_keys: dict = None):
         self.console = Console(force_terminal=True, highlight=False)
+        self.config = config or {}
+        self.data_path = self.config.get("data_path", "data")
+        
+        # Ensure data dir exists
+        os.makedirs(self.data_path, exist_ok=True)
+        
         self.state = VerificationState()
-        self.bank = StatementBank("data/bank.csv") # Persist to disk
-        self.checker = StatementChecker("data", bank=self.bank) 
+        self.bank = StatementBank(os.path.join(self.data_path, "bank.csv")) 
+        self.checker = StatementChecker(self.data_path, bank=self.bank, api_keys=api_keys) 
         self.running = True
         
         # Command Registry

@@ -6,13 +6,13 @@ from src.state import VerificationItem, VerificationState
 from src.bank import StatementBank
 
 class StatementChecker:
-    def __init__(self, data_dir: str, bank: Optional[StatementBank] = None):
+    def __init__(self, data_dir: str, bank: Optional[StatementBank] = None, api_keys: dict = None):
         self.data_dir = data_dir
         self.bank = bank
         self.true_file = os.path.join(data_dir, "true_statements.txt")
         self.false_file = os.path.join(data_dir, "false_statements.txt")
-        # Initialize manager
-        self.manager = ProviderManager()
+        # Initialize manager with keys
+        self.manager = ProviderManager(api_keys=api_keys)
 
     async def _check_file(self, file_path: str, statement: str) -> bool:
         try:

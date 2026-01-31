@@ -6,16 +6,19 @@ from src.providers import GeminiProvider, ModelNotFoundError
 from src.ratelimit import RateLimitManager, GlobalRateLimitError
 
 class ProviderManager:
-    def __init__(self, config_path="config.yaml"):
+    def __init__(self, config_path="config.yaml", api_keys: dict = None):
         self.providers = []
         self.language = "English"
+        self.api_keys = api_keys or {}
         self._load_config(config_path)
     
     def _load_config(self, path):
         if not os.path.exists(path):
             # Fallback default if no config
             print("Config not found, using default Gemini Flash")
-            self.providers.append(GeminiProvider(model_name="gemini-2.5-flash", language=self.language))
+            # Default fallback key check?
+            # Ideally we shouldn't fallback without key, but let's leave it blank
+            self.providers.append(GeminiProvider(api_key=self.api_keys.get('gemini'), model_name="gemini-2.5-flash", language=self.language))
             return
 
         with open(path, 'r') as f:
@@ -47,9 +50,13 @@ class ProviderManager:
     def _create_provider_from_dict(self, entry):
         provider_type = entry.get('provider')
         model = entry.get('model')
+        key_name = entry.get('api_key_name')
+        
+        # Get key
+        api_key = self.api_keys.get(key_name) if key_name else None
         
         if provider_type == 'gemini':
-            self.providers.append(GeminiProvider(model_name=model, language=self.language))
+            self.providers.append(GeminiProvider(api_key=api_key, model_name=model, language=self.language))
         # Add other providers here
             
     async def execute_with_fallback(self, method_name: str, *args, on_update=None, **kwargs) -> Any:
