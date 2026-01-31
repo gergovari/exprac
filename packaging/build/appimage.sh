@@ -6,15 +6,24 @@ set -e
 
 # 1. Setup paths
 BASE_DIR=$(pwd)
+VERSION="v1.0"
+ARCH=$(uname -m)
 PACKAGING_DIR="$BASE_DIR/packaging"
 BUILD_TOOLS_DIR="$PACKAGING_DIR/build"
-# Non-dist artifacts go to project root build/
-APPDIR="$BASE_DIR/build/ExPrac.AppDir"
-OUT_IMAGE="ExPrac.AppImage"
+
+# Artifact organization
+WORKSPACE_DIR="$BASE_DIR/build"
+PYBUILD_DIR="$WORKSPACE_DIR/pyinstaller_build"
+PYDIST_DIR="$WORKSPACE_DIR/pyinstaller_dist"
+APPDIR="$WORKSPACE_DIR/ExPrac.AppDir"
+DIST_DIR="$BASE_DIR/dist"
+OUT_NAME="ExPrac-$ARCH-$VERSION.AppImage"
+OUT_PATH="$DIST_DIR/$OUT_NAME"
+
 TOOL_NAME="appimagetool-x86_64.AppImage"
 TOOL_PATH="$BUILD_TOOLS_DIR/$TOOL_NAME"
 
-echo "🚀 Starting ExPrac v1.0 Build Process..."
+echo "🚀 Starting ExPrac $VERSION ($ARCH) AppImage Build Process..."
 
 # 2. Ensure appimagetool exists
 if [ ! -f "$TOOL_PATH" ] && ! command -v appimagetool >/dev/null 2>&1; then
@@ -23,18 +32,22 @@ if [ ! -f "$TOOL_PATH" ] && ! command -v appimagetool >/dev/null 2>&1; then
     chmod +x "$TOOL_PATH"
 fi
 
-# 3. Clean previous builds
-echo "🧹 Cleaning old build files..."
-rm -rf build dist "$APPDIR" "$OUT_IMAGE"
+# 3. Clean previous specific build files (leaving other files in build/dist untouched)
+echo "🧹 Cleaning previous build artifacts..."
+rm -rf "$PYBUILD_DIR" "$PYDIST_DIR" "$APPDIR"
+rm -f "$OUT_PATH"
+mkdir -p "$PYBUILD_DIR" "$PYDIST_DIR" "$DIST_DIR"
 
 # 4. Running PyInstaller
 echo "🛠️ Building binaries with PyInstaller..."
-pyinstaller "$PACKAGING_DIR/ExPrac.spec"
+pyinstaller --workpath "$PYBUILD_DIR" \
+            --distpath "$PYDIST_DIR" \
+            "$PACKAGING_DIR/ExPrac.spec"
 
 # 5. Prepare AppDir
 echo "📂 Preparing AppDir structure..."
 mkdir -p "$APPDIR"
-cp -r "$BASE_DIR/dist/ExPrac.AppImage"/* "$APPDIR/"
+cp -r "$PYDIST_DIR/ExPrac"/* "$APPDIR/"
 cp "$PACKAGING_DIR/AppRun" "$APPDIR/"
 cp "$PACKAGING_DIR/exprac.desktop" "$APPDIR/"
 cp "$PACKAGING_DIR/icon.png" "$APPDIR/"
@@ -44,9 +57,9 @@ chmod +x "$APPDIR/AppRun"
 # 6. Build AppImage
 echo "📦 Generating AppImage..."
 if command -v appimagetool >/dev/null 2>&1; then
-    appimagetool "$APPDIR" "$OUT_IMAGE"
+    appimagetool "$APPDIR" "$OUT_PATH"
 else
-    "$TOOL_PATH" "$APPDIR" "$OUT_IMAGE"
+    "$TOOL_PATH" "$APPDIR" "$OUT_PATH"
 fi
 
-echo "✅ Build Complete: $OUT_IMAGE"
+echo "✅ Build Complete: $OUT_PATH"

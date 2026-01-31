@@ -1,34 +1,34 @@
 # ExPrac v1.0 Release Build Instructions
 
-This guide explains how to build the standalone executables for Windows and Linux.
+This guide explains how to build the standalone versioned executables for Linux and Windows using the provided automation scripts.
 
 ## 🛠️ Prerequisites
 
-1.  Python 3.10+
-2.  Install build dependencies:
-    ```bash
-    pip install pyinstaller
-    ```
+1.  **Linux Environment** (Distributions like Fedora, Ubuntu, etc.)
+2.  **Docker or Podman** (Required for the Windows cross-compilation script)
+3.  **Python 3.10+** and `pyinstaller` (Required for the Linux build script)
 
 ## 🐧 Linux (AppImage)
 
-The easiest way to build the AppImage is using the provided automation script. It will automatically download the required tools and package everything into a single file.
+The Linux build script generates a portable AppImage.
 
 1.  **Run the build script**:
     ```bash
     ./packaging/build/appimage.sh
     ```
-    *Note: The script will download `appimagetool` into the `packaging/build/` directory if missing.*
+2.  **Output**: The single versioned file `dist/ExPrac-x86_64-v1.0.AppImage` will be created in the project root's `dist/` directory.
+    *Note: All temporary build files are isolated in the root `build/` directory.*
 
 ## 🪟 Windows (.exe)
 
-1.  Open PowerShell or Command Prompt.
-2.  Run PyInstaller:
+The Windows build is performed via Docker cross-compilation directly on Linux.
+
+1.  **Run the Windows build script**:
     ```bash
-    pyinstaller packaging/ExPrac.spec
+    ./packaging/build/windows.sh
     ```
-3.  The executable will be in `dist/ExPrac/ExPrac.exe`.
+2.  **Output**: The single versioned file `dist/ExPrac-x86_64-v1.0.exe` will be created in the project root's `dist/` directory.
+    *Note: This EXE is configured to automatically spawn a terminal when opened.*
 
 ## 📦 Distribution
-- **Windows**: Zip the `dist/ExPrac` folder (or just the `.exe` if you consolidate to onefile).
-- **Linux**: The `.AppImage` file in the project root is ready for distribution as a single portable file.
+Distribution is simple—just share the single versioned file from the `dist/` folder! No installation or extra folders (like `dist/ExPrac/`) are required for the end user.

@@ -5,17 +5,17 @@ HERE=${SELF%/*}
 # Check if we have a terminal
 if [ -t 0 ]; then
     # Already in a terminal, just run
-    exec "$HERE/ExPrac.AppImage" "$@"
+    exec "$HERE/ExPrac" "$@"
 else
     # Not in a terminal, try to spawn one
     if command -v x-terminal-emulator >/dev/null 2>&1; then
-        exec x-terminal-emulator -e "$HERE/ExPrac.AppImage" "$@"
+        exec x-terminal-emulator -e "$HERE/ExPrac" "$@"
     elif command -v gnome-terminal >/dev/null 2>&1; then
-        exec gnome-terminal -- "$HERE/ExPrac.AppImage" "$@"
+        exec gnome-terminal -- "$HERE/ExPrac" "$@"
     elif command -v xterm >/dev/null 2>&1; then
-        exec xterm -e "$HERE/ExPrac.AppImage" "$@"
+        exec xterm -e "$HERE/ExPrac" "$@"
     else
         # Fallback to just running, might fail to show UI if no TTY
-        exec "$HERE/ExPrac.AppImage" "$@"
+        exec "$HERE/ExPrac" "$@"
     fi
 fi
