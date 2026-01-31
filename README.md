@@ -3,6 +3,10 @@
 
 # ExPrac: Truth Verification & AI Essay Console
 
+<p align="center">
+  <img src="packaging/icon.png" alt="ExPrac Icon" width="128"/>
+</p>
+
 ExPrac is a powerful Terminal User Interface (TUI) designed for high-speed fact-checking and material-driven essay generation. It combines multiple LLM providers with locally managed "Banks" to provide reliable, context-aware information processing.
 
 ## ✨ Key Features
@@ -51,14 +55,14 @@ python main.py
 
 ## ⌨️ Navigation & Controls
 
-| Key | Action |
-|-----|--------|
-| **Tab / S-Tab** | Switch between views/tabs |
-| **:** | Enter Command Mode |
-| **PageUp / Dn** | Scroll active list |
-| **Up / Down** | Move selection |
-| **Enter** | View details for selected item |
-| **Ctrl+Q** | Exit application |
+| Key             | Action                         |
+| --------------- | ------------------------------ |
+| **Tab / S-Tab** | Switch between views/tabs      |
+| **:**           | Enter Command Mode             |
+| **PageUp / Dn** | Scroll active list             |
+| **Up / Down**   | Move selection                 |
+| **Enter**       | View details for selected item |
+| **Ctrl+Q**      | Exit application               |
 
 ---
 
