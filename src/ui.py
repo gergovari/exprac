@@ -274,6 +274,23 @@ class HelpView(ScrollableListView):
         
         alias_panel = Panel(alias_table, title="⚡ Quick Actions (Aliases)", border_style="cyan", expand=True)
 
+        # 2.5 Vim Philosophy
+        vim_text = Text()
+        vim_text.append("Philosophy:\n", style="bold underline")
+        vim_text.append("  This application follows ", style="white")
+        vim_text.append("Vim-like modal editing", style="bold green")
+        vim_text.append(" principles.\n")
+        vim_text.append("  • ", style="yellow"); vim_text.append("Normal Mode", style="bold white"); vim_text.append(": Navigate lists, view data, and issue specific keys.\n")
+        vim_text.append("  • ", style="yellow"); vim_text.append("Command Mode", style="bold white"); vim_text.append(": Entered via ':', used for complex operations.\n\n")
+        
+        vim_text.append("Controls:\n", style="bold underline")
+        vim_text.append("  • ", style="yellow"); vim_text.append("h / l", style="bold cyan"); vim_text.append(":  Switch Tabs (Left / Right)\n")
+        vim_text.append("  • ", style="yellow"); vim_text.append("j / k", style="bold cyan"); vim_text.append(":  Scroll Lists (Down / Up)\n")
+        vim_text.append("  • ", style="yellow"); vim_text.append("gg / G", style="bold cyan"); vim_text.append(": Jump to Top / Bottom\n")
+        vim_text.append("  • ", style="yellow"); vim_text.append("/", style="bold cyan"); vim_text.append(":      Search current view\n")
+
+        vim_panel = Panel(vim_text, title="<vim_logo> Vim Navigation & Philosophy", border_style="green", expand=True)
+
         # 3. Commands Detail
         cmd_text = Text()
         
@@ -299,7 +316,21 @@ class HelpView(ScrollableListView):
         cmd_text.append("  :ew remove <id>       ", style="green"); cmd_text.append("Remove essay from the session history\n")
         cmd_text.append("  :mb add <path>        ", style="green"); cmd_text.append("Add PDF/text to Material Bank (Context)\n")
         cmd_text.append("  :mb remove <id>       ", style="green"); cmd_text.append("Remove material from the bank\n")
-        cmd_text.append("  :eb import <csv>      ", style="green"); cmd_text.append("Import previous essay examples for style\n\n")
+        cmd_text.append("  :eb import <csv>      ", style="green"); cmd_text.append("Import examples (Question, Answer)\n\n")
+
+        # 4. File Formats
+        file_text = Text()
+        file_text.append("Statement Bank Import (:sb import)\n", style="bold underline")
+        file_text.append("  • Text File (.txt):", style="yellow"); file_text.append(" One statement per line.\n")
+        file_text.append("  • CSV File (.csv): ", style="yellow"); file_text.append(" Column 1: Text, Column 2: Truth (optional)\n")
+        file_text.append("    Ex: ", style="dim"); file_text.append("\"The sky is blue\", true\n", style="white")
+        file_text.append("\n")
+        
+        file_text.append("Essay Bank Import (:eb import)\n", style="bold underline")
+        file_text.append("  • CSV File (.csv): ", style="yellow"); file_text.append(" Column 1: Question, Column 2: Answer\n")
+        file_text.append("    Ex: ", style="dim"); file_text.append("\"What is AI?\", \"AI is...\"\n", style="white")
+
+        file_panel = Panel(file_text, title="📂 Import File Formats", border_style="magenta", expand=True)
 
         cmd_text.append("System:\n", style="bold underline")
         cmd_text.append("  :bn / :bp   ", style="green"); cmd_text.append("Next / Previous Tab\n")
@@ -325,7 +356,9 @@ class HelpView(ScrollableListView):
             Align.center(title),
             Text(""),
             top_row,
+            vim_panel,
             cmd_panel,
+            file_panel,
             glossary_panel
         )
         
