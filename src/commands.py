@@ -311,7 +311,6 @@ class CommandRegistry:
         if not text: return
         
         # Special handling for aliases ?, /, .
-        # Special handling for aliases ?, /, .
         if text.startswith("?") or text.startswith("/") or text.startswith("."):
             cmd_name = text[0]
             rest = text[1:].strip()
@@ -320,6 +319,9 @@ class CommandRegistry:
                 # Smart parsing for . (Verify) to support multiple quoted args
                 if cmd_name == "." and ('"' in rest or "'" in rest):
                     try:
+                        # On Windows, we still want posix=True for consistent quoting 
+                        # UNLESS it's a file path, but . usually takes statements.
+                        # For simplicity, stick to standard split for statements.
                         args = shlex.split(rest)
                     except ValueError:
                         args = [rest]
@@ -330,8 +332,29 @@ class CommandRegistry:
                 await self.commands[cmd_name].execute(context, args)
             return
 
+        parts = []
         try:
-            parts = shlex.split(text)
+            # Platform-aware parsing
+            import sys
+            is_windows = sys.platform == 'win32'
+            use_posix = not is_windows
+            
+            parts = shlex.split(text, posix=use_posix)
+            
+            # Post-processing for Windows (non-posix mode keeps quotes)
+            if is_windows:
+                new_parts = []
+                for p in parts:
+                    # Strip outer quotes if they match
+                    if len(p) >= 2 and (
+                        (p.startswith('"') and p.endswith('"')) or 
+                        (p.startswith("'") and p.endswith("'"))
+                    ):
+                        new_parts.append(p[1:-1])
+                    else:
+                        new_parts.append(p)
+                parts = new_parts
+                
         except ValueError:
             # Fallback for unclosed quote or parsing error
             parts = text.split(" ", 1)
