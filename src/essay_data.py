@@ -91,9 +91,27 @@ class EssayBank:
         except Exception as e:
             print(f"Error saving EssayBank: {e}")
 
-    def import_from_file(self, path: str) -> int:
-        """Imports examples from a CSV, appending them."""
-        count = 0
+    def add_example(self, question: str, answer: str) -> bool:
+        """Adds an example with duplicate detection. Returns True if added, False if duplicate."""
+        q_norm = question.strip().lower()
+        a_norm = answer.strip().lower()
+        
+        for ex in self.examples:
+            if ex.question.strip().lower() == q_norm and ex.answer.strip().lower() == a_norm:
+                return False
+        
+        new_id = 1
+        if self.examples:
+            new_id = max(e.id for e in self.examples) + 1
+        
+        self.examples.append(EssayExample(question=question.strip(), answer=answer.strip(), id=new_id))
+        self._save()
+        return True
+
+    def import_from_file(self, path: str) -> tuple[int, int]:
+        """Imports examples from a CSV, appending them. Returns (added_count, duplicate_count)."""
+        added_count = 0
+        dup_count = 0
         try:
             with open(path, 'r', newline='', encoding='utf-8') as f:
                 # Sniff delimiter
@@ -107,23 +125,21 @@ class EssayBank:
                     delimiter = ',' # Fallback
                 
                 reader = csv.reader(f, delimiter=delimiter)
-                start_id = 0
-                if self.examples: start_id = max(e.id for e in self.examples)
-                
                 for row in reader:
                     if len(row) >= 2:
                         # Skip header heuristic
-                        if count == 0 and row[0].strip().lower() == "question" and row[1].strip().lower() == "answer":
+                        if added_count == 0 and dup_count == 0 and \
+                           row[0].strip().lower() == "question" and row[1].strip().lower() == "answer":
                             continue
 
-                        start_id += 1
-                        self.examples.append(EssayExample(question=row[0], answer=row[1], id=start_id))
-                        count += 1
-            self._save()
-            return count
+                        if self.add_example(row[0], row[1]):
+                            added_count += 1
+                        else:
+                            dup_count += 1
+            return (added_count, dup_count)
         except Exception as e:
             # print(f"Import error: {e}") # Debug
-            return 0
+            return (0, 0)
             
     def remove_item(self, item_id: int):
         self.examples = [e for e in self.examples if e.id != item_id]

@@ -63,8 +63,11 @@ class EssayBankCommand(Command):
         if subcmd == "import":
             if len(args) < 2: return
             path = " ".join(args[1:])
-            count = context.e_bank.import_from_file(path)
-            context.show_message("Success", f"Imported {count} examples.")
+            added, dups = context.e_bank.import_from_file(path)
+            msg = f"Imported {added} examples."
+            if dups > 0:
+                msg += f" ({dups} duplicates skipped)"
+            context.show_message("Success", msg)
             
         elif subcmd == "remove":
             if len(args) < 2: return
