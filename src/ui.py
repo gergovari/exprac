@@ -840,7 +840,7 @@ class App:
             layout=self.layout,
             key_bindings=self.kb,
             full_screen=True,
-            mouse_support=True,
+            mouse_support=False,
             refresh_interval=0.1
         )
         # Start in Normal Mode
