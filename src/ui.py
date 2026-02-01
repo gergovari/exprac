@@ -750,10 +750,11 @@ class App:
         def _(event):
             view = self.view_manager.get_active()
             if isinstance(view, ScrollableListView):
-                 if view.use_cursor:
-                    view.move_selection(-5)
-                 else:
-                    view.scroll(-5)
+                pg = view._get_page_size()
+                if view.use_cursor:
+                    view.move_selection(-pg)
+                else:
+                    view.scroll(-pg)
 
         @self.kb.add("pagedown", filter=is_normal_mode_filter)
         def _(event):
@@ -763,6 +764,30 @@ class App:
                     view.move_selection(5)
                  else:
                     view.scroll(5)
+
+        # Vim Vertical Jumps (gg, G)
+        def _handle_vertical_jump(target: str):
+            view = self.view_manager.get_active()
+            if isinstance(view, ScrollableListView):
+                 items = view.get_items()
+                 if not items: return
+                 
+                 if target == "top":
+                     view.selected_index = 0
+                     view.scroll_offset = 0
+                 elif target == "bottom":
+                     view.selected_index = max(0, len(items) - 1)
+                     # Calculate offset to ensure the last item is visible at the bottom
+                     page_size = view._get_page_size()
+                     view.scroll_offset = max(0, len(items) - page_size)
+
+        @self.kb.add("g", "g", filter=is_normal_mode_filter)
+        def _(event):
+            _handle_vertical_jump("top")
+
+        @self.kb.add("G", filter=is_normal_mode_filter)
+        def _(event):
+            _handle_vertical_jump("bottom")
 
         @self.kb.add("home", filter=is_normal_mode_filter)
         def _(event):
