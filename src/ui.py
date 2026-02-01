@@ -427,7 +427,7 @@ class EssayBankView(ScrollableListView):
         idx = self.selected_index
         if 0 <= idx < len(items):
             item = items[idx]
-            app.show_dialog("Example Detail", f"Q: {item.question}\n\nA:\n{item.answer}")
+            app.show_dialog("Example Detail", f"Q: {item.question}\n\nA:\n{item.answer}", copy_text=item.answer)
 
     def render(self, console: Console) -> Any:
         from rich.console import Group
@@ -468,7 +468,7 @@ class EssayWriterView(ScrollableListView):
         idx = self.selected_index
         if 0 <= idx < len(items):
             item = items[idx]
-            app.show_dialog("Essay Detail", f"Q: {item.question}\n\nA:\n{item.answer or 'Generating...'}")
+            app.show_dialog("Essay Detail", f"Q: {item.question}\n\nA:\n{item.answer or 'Generating...'}", copy_text=item.answer)
 
     def render(self, console: Console) -> Any:
         from rich.console import Group
@@ -910,8 +910,10 @@ class App:
         self.clear_task = asyncio.create_task(clear())
         self.app.invalidate()
 
-    def show_dialog(self, title: str, text: str):
+    def show_dialog(self, title: str, text: str, copy_text: str = None):
+        import shutil
         from prompt_toolkit.widgets import Dialog, Button, TextArea
+        from prompt_toolkit.layout.dimension import Dimension
         from prompt_toolkit.layout.containers import Window
         from prompt_toolkit.layout.controls import FormattedTextControl
         from prompt_toolkit.layout.containers import Float
@@ -924,6 +926,21 @@ class App:
             self.app.invalidate()
 
         close_btn = Button(text="Close", handler=close)
+
+        def copy_to_clipboard(event=None):
+            content = copy_text or text
+            if not content or content == "Generating...":
+                self.show_message("Error", "Nothing to copy yet.")
+                return
+                
+            try:
+                import pyperclip
+                pyperclip.copy(content)
+                self.show_message("Info", "Answer copied to clipboard!")
+            except Exception as e:
+                self.show_message("Error", f"Failed to copy: {str(e)}")
+
+        copy_btn = Button(text="Copy answer to clipboard", handler=copy_to_clipboard, width=30)
 
         # Custom bindings for the dialog
         kb = KeyBindings()
@@ -1025,13 +1042,36 @@ class App:
         except:
              pass 
 
+        # Custom bindings for the copy button
+        copy_kb = KeyBindings()
+        @copy_kb.add("up")
+        @copy_kb.add("k")
+        @copy_kb.add("pageup")
+        @copy_kb.add("home")
+        def _(event):
+            self.app.layout.focus(text_area)
+            text_area.buffer.cursor_position = 0
 
+        @copy_kb.add("enter")
+        @copy_kb.add("space")
+        @copy_kb.add("c")
+        @copy_kb.add("y")
+        def _(event):
+            copy_to_clipboard()
+
+        try:
+            copy_btn.window.content.key_bindings = copy_kb
+        except:
+            pass
+
+
+        # Responsive width: using Dimension(min, preferred, max) handles resizing
         dialog = Float(content=Dialog(
             title=title,
             body=text_area,
-            buttons=[close_btn],
+            buttons=[close_btn, copy_btn],
             modal=True,
-            width=80,
+            width=Dimension(min=60, preferred=100, max=140),
             with_background=True
         ))
         

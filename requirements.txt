@@ -3,3 +3,4 @@ prompt_toolkit
 google-genai
 python-dotenv
 PyYAML
+pyperclip
