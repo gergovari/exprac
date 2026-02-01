@@ -6,7 +6,7 @@ set -e
 
 # 1. Setup paths
 BASE_DIR=$(pwd)
-VERSION="v1.6"
+VERSION="v1.7"
 ARCH="x86_64" 
 PACKAGING_DIR="$BASE_DIR/packaging"
 
