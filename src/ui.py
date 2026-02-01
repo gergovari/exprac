@@ -222,19 +222,25 @@ class StatementBankView(ScrollableListView):
 
 
 
-class HelpView(View):
+class HelpView(ScrollableListView):
     def __init__(self, registry: CommandRegistry):
         super().__init__("help", "ℹ️  Help")
         self.registry = registry
+        self._rendered_lines = []
     
+    def get_items(self) -> list:
+        # Return dummy items representing lines for the scroll logic
+        return self._rendered_lines
+
     def render(self, console: Console) -> Any:
         from rich.panel import Panel
         from rich.columns import Columns
-        from rich.console import Group
+        from rich.console import Group, Console as CaptureConsole
         from rich.align import Align
         from rich.text import Text
         from rich.table import Table
         from rich import box
+        from io import StringIO
 
         # Title
         title = Text("✨ Truth Verification Console Help ✨", style="bold magenta")
@@ -312,14 +318,37 @@ class HelpView(View):
         glossary_panel = Panel(glossary_text, title="📖 Glossary", border_style="white", expand=True)
         
         # Layout
+        # Use simple HSplit-like structure for the text
         top_row = Columns([nav_panel, alias_panel], expand=True)
         
-        return Group(
+        full_group = Group(
             Align.center(title),
             Text(""),
             top_row,
             cmd_panel,
             glossary_panel
+        )
+        
+        # Render to lines to allow scrolling
+        buf = StringIO()
+        # Use same width as target console
+        c = CaptureConsole(file=buf, width=console.width, force_terminal=True, highlight=False, color_system="auto")
+        c. print(full_group)
+        
+        rendered_str = buf.getvalue()
+        self._rendered_lines = rendered_str.splitlines()
+        
+        # Slice for display
+        page_size = self._get_page_size()
+        visible_lines = self._rendered_lines[self.scroll_offset : self.scroll_offset + page_size]
+        
+        # Add footer manually since we aren't using the standard item-rendering loop
+        content_text = Text.from_ansi("\n".join(visible_lines))
+        
+        return Group(
+            content_text,
+            Text(""),
+            self.render_footer(len(self._rendered_lines), len(visible_lines))
         )
 
 class MaterialBankView(ScrollableListView):
